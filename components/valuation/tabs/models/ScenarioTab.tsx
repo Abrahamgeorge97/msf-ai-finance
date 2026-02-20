@@ -235,7 +235,7 @@ export function ScenarioTab({ config, computed: _computed }: Props) {
                 ["Terminal g",       (a: typeof baseAssumptions) => fmtPct(a.terminal_g, 2)],
               ].map(([label, fmt]) => (
                 <tr key={String(label)} className="hover:bg-muted/30">
-                  <td className="px-4 py-2 text-muted-foreground font-sans">{label}</td>
+                  <td className="px-4 py-2 text-muted-foreground font-sans">{label as string}</td>
                   {SCENARIO_KEYS.map((s) => (
                     <td key={s} className="px-4 py-2 text-right text-foreground">
                       {(fmt as (a: typeof baseAssumptions) => string)(buildScenarioAssumptions(s, baseAssumptions))}

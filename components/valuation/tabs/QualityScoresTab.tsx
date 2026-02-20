@@ -712,7 +712,7 @@ function computeDuPont(B: { net_income: number; revenue: number; total_assets: n
 interface EarningsFlag { label: string; status: "clear" | "watch" | "flag"; finding: string }
 
 function computeEarningsFlags(
-  B: { net_income: number; ocf: number; revenue: number; total_assets: number; ebitda: number; total_debt: number; net_debt: number },
+  B: { net_income: number; ocf: number; capex: number; revenue: number; total_assets: number; ebitda: number; total_debt: number; net_debt: number },
   H: { revenue: number[]; net_income: number[]; ocf: number[]; ebitda: number[] },
   n: number,
 ): EarningsFlag[] {
