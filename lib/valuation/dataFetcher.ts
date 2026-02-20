@@ -8,7 +8,8 @@ export async function fetchConfig(ticker: string): Promise<{
 }> {
   // 1. Try a static override file first (drop TICKER.json in /public/data/ to override)
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+      ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
     const res = await fetch(`${baseUrl}/data/${ticker}.json`, { cache: "no-store" })
     if (res.ok) {
       const json = await res.json()
