@@ -1,0 +1,15 @@
+import type { Metadata } from "next"
+import "./globals.css"
+
+export const metadata: Metadata = {
+  title: "MSF AI Finance — Equity Valuation Terminal",
+  description: "Institutional-grade multi-method equity valuation platform",
+}
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="dark">
+      <body>{children}</body>
+    </html>
+  )
+}

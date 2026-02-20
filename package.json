@@ -1,0 +1,46 @@
+{
+  "name": "valuation-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.4",
+    "@radix-ui/react-select": "^2.1.4",
+    "@radix-ui/react-separator": "^1.1.1",
+    "@radix-ui/react-slider": "^1.2.2",
+    "@radix-ui/react-tabs": "^1.1.2",
+    "@radix-ui/react-tooltip": "^1.1.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "docx": "^9.0.0",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.460.0",
+    "next": "^16.1.6",
+    "openai": "^4.77.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.14.0",
+    "tailwind-merge": "^2.5.5",
+    "xlsx": "^0.18.5",
+    "yahoo-finance2": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}
