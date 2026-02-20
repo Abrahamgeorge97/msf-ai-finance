@@ -3,7 +3,9 @@
 import { useState, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { OverviewTab } from "./tabs/OverviewTab"
+import { FinancialStatementsTab } from "./tabs/FinancialStatementsTab"
 import { ValuationModelsTab } from "./tabs/ValuationModelsTab"
+import { QualityScoresTab } from "./tabs/QualityScoresTab"
 import { NewsTab } from "./tabs/NewsTab"
 import { AskAITab } from "./tabs/AskAITab"
 import { ExportTab } from "./tabs/ExportTab"
@@ -23,8 +25,8 @@ import { useAssumptionsDrawer } from "@/hooks/useAssumptionsDrawer"
 import { ArrowLeft, Settings2, FileText } from "lucide-react"
 import Link from "next/link"
 
-type TopTab = "Overview" | "Valuation Models" | "News" | "Export" | "Ask AI"
-const TOP_TABS: TopTab[] = ["Overview", "Valuation Models", "News", "Export", "Ask AI"]
+type TopTab = "Overview" | "Financials" | "Valuation Models" | "Quality Scores" | "News" | "Export" | "Ask AI"
+const TOP_TABS: TopTab[] = ["Overview", "Financials", "Valuation Models", "Quality Scores", "News", "Export", "Ask AI"]
 
 interface SecFiling {
   date: string
@@ -202,6 +204,9 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
                   <OverviewTab config={config} computed={computed} />
                 </>
               )}
+              {activeTab === "Financials" && (
+                <FinancialStatementsTab config={config} />
+              )}
               {activeTab === "Valuation Models" && (
                 <>
                   <div className="px-4 pt-4 pb-0">
@@ -215,6 +220,9 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
                     onMcComplete={setMcResults}
                   />
                 </>
+              )}
+              {activeTab === "Quality Scores" && (
+                <QualityScoresTab config={config} />
               )}
               {activeTab === "News" && (
                 <NewsTab ticker={config.ticker} companyName={config.name} articles={news} />
