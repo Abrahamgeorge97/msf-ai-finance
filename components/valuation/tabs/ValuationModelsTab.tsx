@@ -14,6 +14,7 @@ import { PCFTab } from "./models/PCFTab"
 import { MonteCarloTab } from "./models/MonteCarloTab"
 import { ReverseDCFTab } from "./models/ReverseDCFTab"
 import { ScenarioTab } from "./models/ScenarioTab"
+import { SOTPTab } from "./models/SOTPTab"
 import type { ValuationConfig, Assumptions } from "@/types/valuation"
 import type { ComputedValuations, MonteCarloResults } from "@/lib/valuation/calculations"
 import { cn } from "@/lib/utils"
@@ -138,7 +139,7 @@ export function ValuationModelsTab({ config, computed, assumptions, mcResults, o
           {(i) => (
             <>
               {i === 0 && <MonteCarloTab config={config} computed={computed} onComplete={onMcComplete} />}
-              {i === 1 && <ComingSoon name="SOTP" />}
+              {i === 1 && <SOTPTab config={config} computed={computed} />}
               {i === 2 && <FootballFieldTab config={config} computed={computed} mcResults={mcResults} />}
               {i === 3 && <ScenarioTab config={config} computed={computed} />}
             </>
