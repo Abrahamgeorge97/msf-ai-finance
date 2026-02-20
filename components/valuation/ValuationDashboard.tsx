@@ -158,7 +158,7 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
         {/* Right side: price + signal + drawer trigger */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right hidden sm:block">
-            <p className="font-mono text-sm font-semibold text-foreground">${B.current_price.toLocaleString()}</p>
+            <p className="font-mono text-sm font-semibold text-foreground">${B.current_price.toLocaleString("en-US")}</p>
             <p className="text-xs text-muted-foreground">{config.ticker}</p>
           </div>
           <SignalBadge signal={computed.finalSignal} size="md" />

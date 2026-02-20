@@ -38,10 +38,10 @@ export function OverviewTab({ config, computed }: Props) {
     <div className="space-y-6 p-4">
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <MetricCard label="Revenue" value={`$${B.revenue.toLocaleString()}M`} delta={M.revenue_growth} deltaPositive={M.revenue_growth?.startsWith("+")} />
-        <MetricCard label="EBITDA (GAAP)" value={`$${B.ebitda.toLocaleString()}M`} />
-        <MetricCard label="Adj. EBITDA" value={`$${B.adj_ebitda.toLocaleString()}M`} />
-        <MetricCard label="FCF" value={`$${B.fcf.toLocaleString()}M`} delta={M.fcf_growth} deltaPositive={M.fcf_growth?.startsWith("+")} />
+        <MetricCard label="Revenue" value={`$${B.revenue.toLocaleString("en-US")}M`} delta={M.revenue_growth} deltaPositive={M.revenue_growth?.startsWith("+")} />
+        <MetricCard label="EBITDA (GAAP)" value={`$${B.ebitda.toLocaleString("en-US")}M`} />
+        <MetricCard label="Adj. EBITDA" value={`$${B.adj_ebitda.toLocaleString("en-US")}M`} />
+        <MetricCard label="FCF" value={`$${B.fcf.toLocaleString("en-US")}M`} delta={M.fcf_growth} deltaPositive={M.fcf_growth?.startsWith("+")} />
         <MetricCard label="Adj. EPS" value={`$${B.adj_eps.toFixed(2)}`} delta={M.adj_eps_growth} deltaPositive={M.adj_eps_growth?.startsWith("+")} />
       </div>
 
@@ -135,7 +135,7 @@ export function OverviewTab({ config, computed }: Props) {
               ["Payout Ratio", `${(B.payout_ratio * 100).toFixed(1)}%`, "Adj. EBITDA Margin", `${(B.adj_ebitda_margin * 100).toFixed(1)}%`],
               ["ROE", `${(B.roe * 100).toFixed(1)}%`, "Gross Margin", `${(B.gross_margin * 100).toFixed(1)}%`],
               ["Book Value/Share", `$${B.bvps.toFixed(2)}`, "Debt/Equity", B.total_equity ? `${(B.total_debt / B.total_equity).toFixed(2)}×` : "N/A"],
-              ["Total Assets", `$${B.total_assets.toLocaleString()}M`, "Goodwill", `$${B.goodwill.toLocaleString()}M`],
+              ["Total Assets", `$${B.total_assets.toLocaleString("en-US")}M`, "Goodwill", `$${B.goodwill.toLocaleString("en-US")}M`],
             ].map(([m1, v1, m2, v2], i) => (
               <tr key={i} className="hover:bg-muted/30">
                 <td className="px-4 py-2 text-muted-foreground text-xs">{m1}</td>

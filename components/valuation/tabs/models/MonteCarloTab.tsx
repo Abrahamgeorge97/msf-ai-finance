@@ -81,7 +81,7 @@ export function MonteCarloTab({ config, computed, onComplete }: Props) {
   return (
     <div className="space-y-6 p-4">
       <p className="text-sm text-muted-foreground font-mono">
-        Monte Carlo — samples WACC (σ=1.5%), Year-1 Growth (σ=2%), Target Margin (σ=2.5%) from N({N_SIMS.toLocaleString()}) simulations
+        Monte Carlo — samples WACC (σ=1.5%), Year-1 Growth (σ=2%), Target Margin (σ=2.5%) from N({N_SIMS.toLocaleString("en-US")}) simulations
       </p>
 
       {/* Controls */}
@@ -91,7 +91,7 @@ export function MonteCarloTab({ config, computed, onComplete }: Props) {
           disabled={running}
           className="px-5 py-2 rounded-md text-sm font-semibold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white transition-colors"
         >
-          {running ? "Running…" : results ? `Re-run (N=${N_SIMS.toLocaleString()})` : `Run Simulation (N=${N_SIMS.toLocaleString()})`}
+          {running ? "Running…" : results ? `Re-run (N=${N_SIMS.toLocaleString("en-US")})` : `Run Simulation (N=${N_SIMS.toLocaleString("en-US")})`}
         </button>
 
         {/* Model selector */}
@@ -130,7 +130,7 @@ export function MonteCarloTab({ config, computed, onComplete }: Props) {
             <MetricCard label="P95" value={fmtUsd(p95, 2)} />
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <MetricCard label="Simulations" value={data.length.toLocaleString()} />
+            <MetricCard label="Simulations" value={data.length.toLocaleString("en-US")} />
             <MetricCard label="P(above market)" value={fmtPct(probUpside, 1)} deltaPositive={probUpside > 0.5} />
             <MetricCard label="Market Price" value={fmtUsd(B.current_price, 2)} />
           </div>
@@ -138,7 +138,7 @@ export function MonteCarloTab({ config, computed, onComplete }: Props) {
           {/* Histogram */}
           <div className="rounded-lg border border-border bg-card p-4">
             <p className="mb-3 text-sm font-semibold text-foreground">
-              Price Distribution — {activeModel} ({data.length.toLocaleString()} simulations)
+              Price Distribution — {activeModel} ({data.length.toLocaleString("en-US")} simulations)
             </p>
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={histogram} margin={{ top: 4, right: 8, left: 0, bottom: 20 }}>

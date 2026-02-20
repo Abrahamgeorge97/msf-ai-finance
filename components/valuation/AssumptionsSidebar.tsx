@@ -60,7 +60,7 @@ export function AssumptionsSidebar({ ticker, assumptions: a, onChange }: Props) 
   const pct = (v: number) => `${(v * 100).toFixed(2)}%`
   const x = (v: number) => `${v.toFixed(1)}×`
   const yrs = (v: number) => `${v} yrs`
-  const sims = (v: number) => v.toLocaleString()
+  const sims = (v: number) => v.toLocaleString("en-US")
 
   return (
     <aside className="w-64 shrink-0 border-r border-border bg-card/50 flex flex-col h-full overflow-y-auto">

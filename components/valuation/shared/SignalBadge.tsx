@@ -53,7 +53,7 @@ export function ConsensusSignal({
       <SignalBadge signal={signal} size="lg" />
       <p className="mt-2 text-sm text-muted-foreground">
         Consensus: {buys} BUY · {holds} HOLD · {sells} SELL &nbsp;|&nbsp; Current{" "}
-        <span className="font-mono font-semibold text-foreground">${currentPrice.toLocaleString()}</span>
+        <span className="font-mono font-semibold text-foreground">${currentPrice.toLocaleString("en-US")}</span>
       </p>
     </div>
   )
