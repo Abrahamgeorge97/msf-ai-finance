@@ -207,7 +207,13 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
                   <div className="px-4 pt-4 pb-0">
                     <ValuationSummaryCard data={summaryData} ticker={config.ticker} />
                   </div>
-                  <ValuationModelsTab config={config} computed={computed} assumptions={assumptions} />
+                  <ValuationModelsTab
+                    config={config}
+                    computed={computed}
+                    assumptions={assumptions}
+                    mcResults={mcResults}
+                    onMcComplete={setMcResults}
+                  />
                 </>
               )}
               {activeTab === "News" && (

@@ -135,8 +135,31 @@ export function FinanceTerminal({ config, assumptions, className }: Props) {
           assumptions,
         }),
       })
-      const data = await res.json()
-      push({ type: "output", content: data.reply ?? "(no response)" })
+
+      if (!res.body) throw new Error("No response body")
+
+      // Create a streaming output entry and update it token-by-token
+      const streamId = uid()
+      setHistory((h) => [...h, { id: streamId, type: "output", content: "" }])
+
+      const reader  = res.body.getReader()
+      const decoder = new TextDecoder()
+      let acc = ""
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        acc += decoder.decode(value, { stream: true })
+        setHistory((h) =>
+          h.map((e) => (e.id === streamId ? { ...e, content: acc } : e)),
+        )
+      }
+      if (!acc) {
+        setHistory((h) =>
+          h.map((e) => (e.id === streamId ? { ...e, content: "(no response)" } : e)),
+        )
+      }
     } catch {
       push({ type: "error", content: "Error: could not reach API. Check your OPENAI_API_KEY." })
     } finally {

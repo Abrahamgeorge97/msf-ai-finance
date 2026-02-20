@@ -11,8 +11,11 @@ import { PEGTab } from "./models/PEGTab"
 import { PBTab } from "./models/PBTab"
 import { RevenueTab } from "./models/RevenueTab"
 import { PCFTab } from "./models/PCFTab"
+import { MonteCarloTab } from "./models/MonteCarloTab"
+import { ReverseDCFTab } from "./models/ReverseDCFTab"
+import { ScenarioTab } from "./models/ScenarioTab"
 import type { ValuationConfig, Assumptions } from "@/types/valuation"
-import type { ComputedValuations } from "@/lib/valuation/calculations"
+import type { ComputedValuations, MonteCarloResults } from "@/lib/valuation/calculations"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
 
@@ -72,9 +75,10 @@ interface Props {
   computed: ComputedValuations
   assumptions: Assumptions
   mcResults?: Record<string, number[]>
+  onMcComplete?: (results: MonteCarloResults) => void
 }
 
-export function ValuationModelsTab({ config, computed, assumptions, mcResults }: Props) {
+export function ValuationModelsTab({ config, computed, assumptions, mcResults, onMcComplete }: Props) {
   const [category, setCategory] = useState<Category>("Core")
 
   return (
@@ -106,7 +110,7 @@ export function ValuationModelsTab({ config, computed, assumptions, mcResults }:
               {i === 1 && <FCFETab config={config} computed={computed} />}
               {i === 2 && <ResidualIncomeTab config={config} computed={computed} />}
               {i === 3 && <DDMTab config={config} computed={computed} />}
-              {i === 4 && <ComingSoon name="Reverse DCF" />}
+              {i === 4 && <ReverseDCFTab config={config} computed={computed} />}
             </>
           )}
         </TabGroup>
@@ -133,10 +137,10 @@ export function ValuationModelsTab({ config, computed, assumptions, mcResults }:
         <TabGroup tabs={ADVANCED_TABS} stickyTop="top-[41px]">
           {(i) => (
             <>
-              {i === 0 && <ComingSoon name="Monte Carlo" />}
+              {i === 0 && <MonteCarloTab config={config} computed={computed} onComplete={onMcComplete} />}
               {i === 1 && <ComingSoon name="SOTP" />}
               {i === 2 && <FootballFieldTab config={config} computed={computed} mcResults={mcResults} />}
-              {i === 3 && <ComingSoon name="Scenario" />}
+              {i === 3 && <ScenarioTab config={config} computed={computed} />}
             </>
           )}
         </TabGroup>

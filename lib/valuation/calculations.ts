@@ -333,6 +333,162 @@ export interface ComputedValuations {
   sotvEV: number
 }
 
+// ── Monte Carlo Simulation ──────────────────────────────────────────────────────
+
+/** Box-Muller normal sample */
+function sampleNormal(mean: number, std: number): number {
+  const u1 = Math.random() || 1e-10
+  const u2 = Math.random()
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+  return mean + std * z
+}
+
+export interface MonteCarloResults {
+  [model: string]: number[]
+}
+
+/**
+ * Run N Monte Carlo simulations by sampling WACC (±1.5%), year-1 growth (±2%),
+ * and target EBITDA margin (±2.5%) from normal distributions.
+ * Returns arrays of simulated price-per-share for 5 key models.
+ */
+export function runMonteCarlo(
+  B: Baseline,
+  a: Assumptions,
+  medianEvm: number,
+  medianPE: number,
+  n_sims = 1000,
+): MonteCarloResults {
+  const results: MonteCarloResults = {
+    "FCFF (DCF)": [],
+    "EV/EBITDA":  [],
+    "P/E":        [],
+    "FCFE (DCF)": [],
+    "Residual Income": [],
+  }
+  const cap = B.current_price > 0 ? B.current_price * 15 : 1e6
+
+  for (let i = 0; i < n_sims; i++) {
+    const wacc_s   = Math.max(0.04, sampleNormal(a.wacc, 0.015))
+    const yr1_s    = sampleNormal(a.yr1_g, 0.020)
+    const margin_s = sampleNormal(a.target_ebitda_m, 0.025)
+    const tg_s     = Math.min(Math.max(a.terminal_g, 0.005), wacc_s - 0.005)
+    const ke_s     = Math.max(0.05, sampleNormal(a.cost_of_equity, 0.015))
+
+    const a_sim: Assumptions = {
+      ...a,
+      wacc: wacc_s,
+      yr1_g: yr1_s,
+      yr2_g: yr1_s * 1.1,
+      yr3_g: yr1_s * 1.2,
+      lt_g: Math.max(yr1_s * 0.6, 0.01),
+      target_ebitda_m: margin_s,
+      terminal_g: tg_s,
+    }
+
+    const growthRates = buildGrowthSchedule(a_sim)
+    const proforma    = buildProforma(B, growthRates, a_sim)
+    const fcffs       = proforma.map((r) => r.fcff)
+    const lastEbitda  = proforma[proforma.length - 1].ebitda
+
+    // FCFF DCF
+    if (wacc_s > tg_s) {
+      const tv = (fcffs[fcffs.length - 1] * (1 + tg_s)) / (wacc_s - tg_s)
+      const { pps } = dcfPrice(fcffs, tv, wacc_s, B.net_debt, B.shares_diluted)
+      if (pps > 0 && pps < cap) results["FCFF (DCF)"].push(pps)
+    }
+
+    // EV/EBITDA
+    if (lastEbitda > 0 && B.shares_diluted > 0 && medianEvm > 0) {
+      const p = (lastEbitda * medianEvm - B.net_debt) / B.shares_diluted
+      if (p > 0 && p < cap) results["EV/EBITDA"].push(p)
+    }
+
+    // P/E
+    const eps_s = B.shares_diluted > 0
+      ? proforma[proforma.length - 1].net_income / B.shares_diluted
+      : 0
+    if (eps_s > 0 && medianPE > 0) results["P/E"].push(Math.min(medianPE * eps_s, cap))
+
+    // FCFE
+    if (ke_s > tg_s) {
+      const { pps_fcfe } = computeFCFE(proforma, B, a_sim, ke_s)
+      if (pps_fcfe > 0 && pps_fcfe < cap) results["FCFE (DCF)"].push(pps_fcfe)
+    }
+
+    // Residual Income
+    const { pps_ri } = computeRI(B, a_sim, ke_s)
+    if (pps_ri > 0 && pps_ri < cap) results["Residual Income"].push(pps_ri)
+  }
+
+  return results
+}
+
+// ── Reverse DCF ────────────────────────────────────────────────────────────────
+
+/**
+ * Reverse DCF — find the implied Year-1 revenue growth rate such that the
+ * FCFF DCF model produces the current market price (WACC and terminal_g fixed).
+ * Uses bisection (60 iterations → precision < 0.01 pp).
+ */
+export function computeReverseDCF(
+  B: Baseline,
+  a: Assumptions,
+): {
+  impliedGrowth: number
+  rows: { label: string; value: string }[]
+  sensitivityData: { growth: number; pps: number }[]
+} {
+  const target = B.current_price
+  if (target <= 0 || a.wacc <= a.terminal_g) {
+    return { impliedGrowth: 0, rows: [], sensitivityData: [] }
+  }
+
+  /** DCF price for a given Yr1 growth (Yr2/Yr3/LT scale proportionally) */
+  function ppsForGrowth(g: number): number {
+    const a_sim: Assumptions = {
+      ...a,
+      yr1_g: g,
+      yr2_g: g * 1.1,
+      yr3_g: g * 1.2,
+      lt_g: Math.max(g * 0.6, 0.01),
+    }
+    const proforma = buildProforma(B, buildGrowthSchedule(a_sim), a_sim)
+    const fcffs    = proforma.map((r) => r.fcff)
+    const tv = a.wacc > a.terminal_g
+      ? (fcffs[fcffs.length - 1] * (1 + a.terminal_g)) / (a.wacc - a.terminal_g)
+      : proforma[proforma.length - 1].ebitda * a.exit_mult
+    return dcfPrice(fcffs, tv, a.wacc, B.net_debt, B.shares_diluted).pps
+  }
+
+  let lo = -0.20, hi = 0.60, impliedGrowth = a.yr1_g
+  for (let iter = 0; iter < 60; iter++) {
+    const mid = (lo + hi) / 2
+    const pps = ppsForGrowth(mid)
+    if (Math.abs(pps - target) < 0.005) { impliedGrowth = mid; break }
+    if (pps > target) hi = mid
+    else lo = mid
+    impliedGrowth = mid
+  }
+
+  const rows = [
+    { label: "Market Price",                 value: fmtUsd(target, 2) },
+    { label: "Implied Yr1 Revenue Growth",   value: fmtPct(impliedGrowth, 2) },
+    { label: "Your Base Yr1 Growth",         value: fmtPct(a.yr1_g, 2) },
+    { label: "Implied vs Base (delta)",      value: fmtPct(impliedGrowth - a.yr1_g, 2) },
+    { label: "WACC (fixed)",                 value: fmtPct(a.wacc, 2) },
+    { label: "Terminal Growth (fixed)",      value: fmtPct(a.terminal_g, 2) },
+    { label: "Projection Period",            value: `${a.proj_years_n} years` },
+  ]
+
+  const sensitivityData = Array.from({ length: 25 }, (_, i) => {
+    const g = -0.10 + i * 0.02
+    return { growth: g, pps: Math.max(0, ppsForGrowth(g)) }
+  })
+
+  return { impliedGrowth, rows, sensitivityData }
+}
+
 export function computeAll(
   B: Baseline,
   comps: Record<string, { ev_ebitda: number; ev_rev: number; pe: number; peg: number; pb: number; pcf?: number }>,

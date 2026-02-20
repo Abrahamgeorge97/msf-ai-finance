@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import OpenAI from "openai"
 
 // ── Comprehensive knowledge base (ported from qa_assistant.py) ────────────────
@@ -198,35 +198,54 @@ ${compsText ? `### Peer Comparables\n${compsText}` : ""}
 ---`
 }
 
-// ── API route ─────────────────────────────────────────────────────────────────
+// ── API route (streaming) ──────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  try {
-    const { messages, config, assumptions } = await req.json()
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      return NextResponse.json(
-        { reply: "OpenAI API key not configured. Add OPENAI_API_KEY to your .env.local file." },
-        { status: 200 }
-      )
-    }
+  const encoder = new TextEncoder()
 
+  const { messages, config, assumptions } = await req.json()
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    const body = encoder.encode("OpenAI API key not configured. Add OPENAI_API_KEY to your .env.local file.")
+    return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8" } })
+  }
+
+  try {
     const client = new OpenAI({ apiKey })
     const systemContent = SYSTEM_PROMPT + "\n\n" + buildContext(config, assumptions)
 
-    const completion = await client.chat.completions.create({
+    const stream = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemContent },
-        ...messages.slice(-12),   // keep last 12 turns for context
+        ...messages.slice(-12),
       ],
       max_tokens: 700,
       temperature: 0.25,
+      stream: true,
     })
 
-    return NextResponse.json({ reply: completion.choices[0].message.content })
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            const text = chunk.choices[0]?.delta?.content ?? ""
+            if (text) controller.enqueue(encoder.encode(text))
+          }
+        } finally {
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(readable, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error"
-    return NextResponse.json({ reply: `Error: ${msg}` }, { status: 200 })
+    return new Response(encoder.encode(`Error: ${msg}`), {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    })
   }
 }
