@@ -539,9 +539,9 @@ function BalanceSheetSection({ config }: { config: ValuationConfig }) {
           <table className="w-full text-sm">
             <tbody className="divide-y divide-border/40">
               {[
-                { label: "Cash & Equivalents",          value: B.cash,                     bold: false },
+                { label: "Cash & Equivalents",          value: B.total_debt - B.net_debt,                     bold: false },
                 { label: "Goodwill",                    value: B.goodwill,                 bold: false },
-                { label: "Other Assets (derived)",      value: B.total_assets - B.cash - B.goodwill, bold: false, muted: true },
+                { label: "Other Assets (derived)",      value: B.total_assets - (B.total_debt - B.net_debt) - B.goodwill, bold: false, muted: true },
                 { label: "Total Assets",                value: B.total_assets,             bold: true  },
               ].map(({ label, value, bold, muted }) => (
                 <tr key={label} className="hover:bg-muted/20">
