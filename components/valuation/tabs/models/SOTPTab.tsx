@@ -116,9 +116,39 @@ export function SOTPTab({ config, computed }: Props) {
 
   return (
     <div className="space-y-6 p-4">
-      <p className="text-sm text-muted-foreground font-mono">
-        SOTP — Segment EV = Segment Revenue × EBITDA Margin × EV/EBITDA Multiple. Sum → less net debt → equity value → price per share.
-      </p>
+      {/* ── SOTP Guidance ────────────────────────────────────────────────────── */}
+      <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+        <p className="text-sm font-semibold text-blue-300">When to use Sum-of-the-Parts (SOTP)</p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          SOTP is the industry-standard approach for <span className="text-foreground font-medium">conglomerates</span> — companies
+          with multiple distinct business divisions that operate in different industries and deserve different valuation multiples.
+          A single EV/EBITDA multiple applied to the whole company will systematically mis-value these firms.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
+          <div>
+            <p className="text-muted-foreground font-semibold mb-1">Classic conglomerate examples:</p>
+            <ul className="space-y-1 text-muted-foreground">
+              <li><span className="text-foreground font-mono">GOOGL</span> — Search (25×), YouTube (20×), Google Cloud (35×), Other Bets (5×)</li>
+              <li><span className="text-foreground font-mono">AMZN</span> — Retail (12×), AWS (30×), Advertising (25×), Prime (18×)</li>
+              <li><span className="text-foreground font-mono">GE</span> — Aerospace (20×), Energy (14×), Healthcare (22×)</li>
+              <li><span className="text-foreground font-mono">META</span> — Core Social (18×), Reality Labs (negative — expense drag)</li>
+            </ul>
+          </div>
+          <div>
+            <p className="text-muted-foreground font-semibold mb-1">How to build a SOTP model:</p>
+            <ol className="space-y-1 text-muted-foreground list-decimal list-inside">
+              <li>Split total revenue into segments (use 10-K segment disclosures)</li>
+              <li>Assign each segment its own EBITDA margin (operating segment data)</li>
+              <li>Apply a peer-derived EV/EBITDA multiple per segment (high-growth = higher multiple)</li>
+              <li>Sum segment EVs, subtract net debt, divide by shares</li>
+            </ol>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground border-t border-blue-500/20 pt-2">
+          <span className="text-foreground font-medium">Formula:</span> Segment EV = Revenue × EBITDA Margin × EV/EBITDA Multiple &nbsp;|&nbsp;
+          Equity Value = Σ(Segment EV) − Net Debt &nbsp;|&nbsp; Price/Share = Equity Value ÷ Shares Diluted
+        </p>
+      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

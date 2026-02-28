@@ -208,6 +208,10 @@ Revenue:  RevenueFromContractWithCustomerExcludingAssessedTax
 
 D&A:      DepreciationDepletionAndAmortization
           → DepreciationAndAmortization → Depreciation
+          → DepreciationAmortizationAndAccretionNet
+          → OtherDepreciationAndAmortization
+          → DepreciationNonproduction
+          → fallback: Revenue × 3% if all concepts absent
 
 OCF:      NetCashProvidedByUsedInOperatingActivities
           → NetCashProvidedByOperatingActivities
@@ -279,9 +283,23 @@ The composite consensus weights (must sum to 1.0):
 ## Caveats
 
 - **US equities only** — XBRL data is available for SEC-registered companies. Foreign ADRs fall back to Yahoo Finance.
-- **Static peer comps** — peer multiples are placeholder values (Peer A–D). Real peer group screening by SIC code is a future enhancement.
+- **Live peer comps** — sector peers are automatically selected from an 11-sector GICS map and fetched live from Yahoo Finance (EV/EBITDA, EV/Revenue, P/E, PEG, P/B, P/CF per peer).
 - **Price is fetched at load time** — does not refresh live during the session.
-- **SOTP requires a custom config** — segment-level valuation works best when segment revenue and margins are provided via a JSON config override in `/public/data/{TICKER}.json`.
+- **SOTP is most meaningful for conglomerates** — for single-segment companies the model defaults to one "Core Business" row. It is designed for conglomerates like Alphabet (Search / YouTube / Cloud / Other Bets), Amazon (Retail / AWS / Advertising), or GE (Aerospace / Energy / Healthcare) where each division warrants a different EV/EBITDA multiple sourced from its own peer group. Custom segment data can be provided via `/public/data/{TICKER}.json`.
+
+### SOTP Reference Multiples by Sector (approximate)
+
+| Division Type | EV/EBITDA Range | Example |
+|---------------|----------------|---------|
+| Cloud / SaaS | 25–40× | AWS, Google Cloud |
+| Digital Advertising | 18–25× | YouTube, Meta |
+| Consumer Internet / Search | 15–22× | Google Search |
+| E-commerce / Retail | 10–15× | Amazon Retail |
+| Industrial / Aerospace | 14–20× | GE Aerospace |
+| Healthcare / MedTech | 18–25× | GE HealthCare |
+| Energy / Utilities | 8–14× | GE Vernova |
+| Financial Services | 10–15× | Berkshire Insurance |
+| Pre-revenue / R&D units | 0–5× | Meta Reality Labs |
 
 ---
 
