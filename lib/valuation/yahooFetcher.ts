@@ -10,6 +10,7 @@ import YahooFinance from "yahoo-finance2"
 import type { ValuationConfig, Baseline, HistoricalIS, NewsArticle } from "@/types/valuation"
 import { fetchXbrlFundamentals } from "./edgarXbrl"
 import { fetchNews } from "./newsFetcher"
+import { fetchPeerComps } from "./peerFetcher"
 
 const yahooFinance = new YahooFinance()
 
@@ -110,12 +111,14 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
     lookupCIK(T),
   ])
 
-  // ── Parallel fetch: 10-K metadata + XBRL fundamentals + news ────────────
+  // ── Parallel fetch: 10-K metadata + XBRL fundamentals + news + peer comps ──
   const companyName = String((quote.price as { longName?: string; shortName?: string })?.longName ?? "")
-  const [sec, xbrl, news] = await Promise.all([
+  const sector = String((quote.assetProfile as { sector?: string })?.sector ?? "")
+  const [sec, xbrl, news, liveComps] = await Promise.all([
     cik ? fetchLatest10K(cik) : Promise.resolve(null),
     cik ? fetchXbrlFundamentals(cik) : Promise.resolve(null),
     fetchNews(T, companyName),
+    fetchPeerComps(T, sector),
   ])
 
   // ── Yahoo market data (always live) ──────────────────────────────────────
@@ -254,12 +257,7 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
       },
     },
     acquisitions: {},
-    comps: {
-      "Peer A": { ev_ebitda: 12.0, ev_rev: 2.8, pe: 22.0, peg: 1.5, pb: 4.2, pcf: 14.0 },
-      "Peer B": { ev_ebitda: 14.5, ev_rev: 3.2, pe: 26.0, peg: 1.8, pb: 5.1, pcf: 17.0 },
-      "Peer C": { ev_ebitda: 11.0, ev_rev: 2.4, pe: 19.0, peg: 1.3, pb: 3.8, pcf: 12.0 },
-      "Peer D": { ev_ebitda: 13.5, ev_rev: 3.0, pe: 24.0, peg: 1.6, pb: 4.6, pcf: 15.5 },
-    },
+    comps: liveComps,
     capm: {
       rf:           0.043,
       beta,
