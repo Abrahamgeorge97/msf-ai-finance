@@ -15,14 +15,25 @@ export function buildProforma(
   B: Baseline,
   growthRates: number[],
   a: Assumptions,
+  startYear?: number,
 ): ProFormaRow[] {
+  const nwc_pct = a.nwc_pct_rev ?? 0.03
   const cogs_pct = B.revenue ? B.cogs / B.revenue : 0.55
-  const sga_pct = B.revenue ? B.sga / B.revenue : 0.20
   const da_pct = B.revenue ? B.da_total / B.revenue : 0.03
-  const int_pct = B.revenue ? B.interest_expense / B.revenue : 0.025
+  // Issue 7: anchor interest to debt balance, not revenue
+  const implied_debt_rate = B.total_debt > 0
+    ? B.interest_expense / B.total_debt
+    : (a.cost_of_debt ?? 0.045)
+  // Issue 12: dynamic projection year
+  const baseYear = startYear ?? new Date().getFullYear() + 1
 
-  return growthRates.map((_, i) => {
+  const rows: ProFormaRow[] = []
+  let prev_rev = B.revenue
+
+  for (let i = 0; i < growthRates.length; i++) {
     const rev = B.revenue * growthRates.slice(0, i + 1).reduce((acc, g) => acc * (1 + g), 1)
+    // Issue 1: ΔNWC — investment in working capital as revenue grows
+    const delta_nwc = (rev - prev_rev) * nwc_pct
     const marginProg = (i + 1) / growthRates.length
     const ebitdaM = B.ebitda_margin + marginProg * (a.target_ebitda_m - B.ebitda_margin)
     const cogs = rev * cogs_pct
@@ -34,17 +45,20 @@ export function buildProforma(
     const ebitda = rev * ebitdaM
     const op_inc = Math.max(0, ebitda - da)
     const sga = Math.max(0, gp - op_inc)   // residual for display; absorbs margin improvement
-    const interest = rev * int_pct
+    // Issue 7: debt-based interest (constant debt balance)
+    const interest = B.total_debt * implied_debt_rate
     const pretax = op_inc - interest
     const tax = pretax > 0 ? pretax * B.tax_rate : 0
     const ni = pretax - tax
     const capex = rev * a.capex_pct
-    const fcff = op_inc * (1 - B.tax_rate) + da - capex
+    // Issue 1: FCFF includes ΔNWC deduction
+    const fcff = op_inc * (1 - B.tax_rate) + da - capex - delta_nwc
     const fcfe = fcff - interest * (1 - B.tax_rate)
     const dividends = ni > 0 ? ni * B.payout_ratio : 0
 
-    return {
-      year: 2025 + i,
+    prev_rev = rev
+    rows.push({
+      year: baseYear + i,
       revenue: rev,
       cogs,
       gross_profit: gp,
@@ -57,12 +71,15 @@ export function buildProforma(
       net_income: ni,
       ebitda,
       capex,
+      delta_nwc,
       fcff,
       fcfe,
       dividends,
       ebitda_margin: rev ? ebitda / rev : 0,
-    }
-  })
+    })
+  }
+
+  return rows
 }
 
 export function dcfPrice(
@@ -210,7 +227,8 @@ export function computeHModelDDM(
 ): number {
   const D0 = B.dps
   const gL = a.terminal_g
-  const gS = a.yr1_g
+  // Issue 13: gS = 3-year average of projected growth rates
+  const gS = (a.yr1_g + a.yr2_g + a.yr3_g) / 3
   const H = a.hl ?? 2.5
   const r = ke
 
@@ -335,6 +353,7 @@ export interface ComputedValuations {
   proforma: ProFormaRow[]
   growthSchedule: number[]
   sotvEV: number
+  sotpIsFallback: boolean
 }
 
 // ── Monte Carlo Simulation ──────────────────────────────────────────────────────
@@ -375,7 +394,10 @@ export function runMonteCarlo(
   for (let i = 0; i < n_sims; i++) {
     const wacc_s   = Math.max(0.04, sampleNormal(a.wacc, 0.015))
     const yr1_s    = sampleNormal(a.yr1_g, 0.020)
-    const margin_s = sampleNormal(a.target_ebitda_m, 0.025)
+    // Issue 14: growth-margin correlation (ρ≈0.4) — higher growth → higher margins
+    const yr1_dev  = yr1_s - a.yr1_g
+    const margin_base = sampleNormal(a.target_ebitda_m, 0.020)
+    const margin_s = margin_base + yr1_dev * 0.4
     const tg_s     = Math.min(Math.max(a.terminal_g, 0.005), wacc_s - 0.005)
     const ke_s     = Math.max(0.05, sampleNormal(a.cost_of_equity, 0.015))
 
@@ -383,8 +405,9 @@ export function runMonteCarlo(
       ...a,
       wacc: wacc_s,
       yr1_g: yr1_s,
-      yr2_g: yr1_s * 1.1,
-      yr3_g: yr1_s * 1.2,
+      // Issue 4: additive delta preserves scenario shape across shocks
+      yr2_g: yr1_s + (a.yr2_g - a.yr1_g),
+      yr3_g: yr1_s + (a.yr3_g - a.yr1_g),
       lt_g: Math.max(yr1_s * 0.6, 0.01),
       target_ebitda_m: margin_s,
       terminal_g: tg_s,
@@ -448,13 +471,14 @@ export function computeReverseDCF(
     return { impliedGrowth: 0, rows: [], sensitivityData: [] }
   }
 
-  /** DCF price for a given Yr1 growth (Yr2/Yr3/LT scale proportionally) */
+  /** DCF price for a given Yr1 growth (Yr2/Yr3 shift by same delta, preserving scenario shape) */
   function ppsForGrowth(g: number): number {
     const a_sim: Assumptions = {
       ...a,
       yr1_g: g,
-      yr2_g: g * 1.1,
-      yr3_g: g * 1.2,
+      // Issue 16: additive shift preserves the yr2-yr1 and yr3-yr1 step-ups
+      yr2_g: g + (a.yr2_g - a.yr1_g),
+      yr3_g: g + (a.yr3_g - a.yr1_g),
       lt_g: Math.max(g * 0.6, 0.01),
     }
     const proforma = buildProforma(B, buildGrowthSchedule(a_sim), a_sim)
@@ -516,11 +540,12 @@ export function computeAll(
   const medianPb    = median(compArr.map((c) => c.pb))
   const medianPcf   = median(compArr.map((c) => c.pcf ?? 15))
 
-  // EPS CAGR
+  // Issue 15: EPS CAGR — filter to positive values to avoid nonsensical negative-to-negative CAGR
+  const positiveEPS = (histEPS ?? []).filter((e) => e > 0)
   const epsCAGR =
-    histEPS.length >= 2 && histEPS[0] > 0
-      ? (histEPS[histEPS.length - 1] / histEPS[0]) ** (1 / Math.max(histEPS.length - 1, 1)) - 1
-      : 0.05
+    positiveEPS.length >= 2
+      ? (positiveEPS[positiveEPS.length - 1] / positiveEPS[0]) ** (1 / Math.max(positiveEPS.length - 1, 1)) - 1
+      : a.yr1_g > 0 ? a.yr1_g : 0.05
 
   const growthSchedule = buildGrowthSchedule(a)
   const proforma = buildProforma(B, growthSchedule, a)
@@ -549,25 +574,30 @@ export function computeAll(
   const { pps: pps_fcff, ev: ev_fcff, pvFcfs, pvTv } = dcfPrice(fcffs, tvFcff, a.wacc, B.net_debt, B.shares_diluted)
 
   // ── DDM 2-stage ──────────────────────────────────────────────────────────
+  // Issue 2: use CAPM-derived ke consistently (not manual cost_of_equity override)
   const divProj = proforma.map((r) => (B.shares_diluted ? r.dividends / B.shares_diluted : 0))
-  const pvDivs = divProj.reduce((acc, d, i) => acc + d / (1 + a.cost_of_equity) ** (i + 1), 0)
+  const pvDivs = divProj.reduce((acc, d, i) => acc + d / (1 + ke) ** (i + 1), 0)
   const finalDiv = divProj[divProj.length - 1] * (1 + a.terminal_g)
-  const tvDdm = a.cost_of_equity > a.terminal_g ? finalDiv / (a.cost_of_equity - a.terminal_g) : 0
-  const pvTvDdm = tvDdm / (1 + a.cost_of_equity) ** a.proj_years_n
+  const tvDdm = ke > a.terminal_g ? finalDiv / (ke - a.terminal_g) : 0
+  const pvTvDdm = tvDdm / (1 + ke) ** a.proj_years_n
   const pps_ddm = B.dps > 0 ? pvDivs + pvTvDdm : 0
 
   // ── Multiples ─────────────────────────────────────────────────────────────
   const pps_ebitda = B.shares_diluted ? (B.adj_ebitda * medianEvm - B.net_debt) / B.shares_diluted : 0
   const pps_rev = B.shares_diluted ? (B.revenue * medianEvRev - B.net_debt) / B.shares_diluted : 0
-  const pps_pe = medianPE * B.adj_eps
-  const pegGrowth = epsCAGR > 0 ? epsCAGR : 0.05
-  const pps_peg = medianPeg * pegGrowth * 100 * B.adj_eps
+  // Issue 5: P/E uses NTM forward EPS (trailing × (1 + yr1 growth))
+  const ntmEps = B.adj_eps * (1 + a.yr1_g)
+  const pps_pe = medianPE * ntmEps
+  // Issue 6: PEG uses forward growth (yr1_g) and NTM EPS — consistent with forward-looking peer PEG multiples
+  const pegGrowth = Math.max(a.yr1_g, 0.01)
+  const pps_peg = medianPeg * pegGrowth * 100 * ntmEps
   const pps_pb = medianPb * B.bvps
 
-  // ── SOTP ──────────────────────────────────────────────────────────────────
-  const sotvEV = Object.keys(acquisitions).length
-    ? Object.values(acquisitions).reduce((sum, d) => sum + d.rev * d.margin * d.mult, 0)
-    : B.adj_ebitda * medianEvm
+  // ── SOTP — Issue 3: track fallback state ──────────────────────────────────
+  const sotpIsFallback = Object.keys(acquisitions).length === 0
+  const sotvEV = sotpIsFallback
+    ? B.adj_ebitda * medianEvm
+    : Object.values(acquisitions).reduce((sum, d) => sum + d.rev * d.margin * d.mult, 0)
   const pps_sotp = B.shares_diluted ? (sotvEV - B.net_debt) / B.shares_diluted : 0
 
   // ── New CFA models ────────────────────────────────────────────────────────
@@ -593,7 +623,8 @@ export function computeAll(
     PEG:               pps_peg,
     "P/B":             pps_pb,
     "P/CF":            pps_pcf,
-    SOTP:              pps_sotp,
+    // Issue 3: exclude SOTP from signal table when it's just the EBITDA fallback
+    SOTP:              sotpIsFallback ? 0 : pps_sotp,
   }
 
   // Filter out zero-value models (N/A — missing data)
@@ -628,6 +659,6 @@ export function computeAll(
     signalRows, finalSignal,
     buys: counts.BUY ?? 0, holds: counts.HOLD ?? 0, sells: counts.SELL ?? 0,
     medianPE, medianEvm, medianEvRev, medianPeg, medianPb, medianPcf,
-    epsCAGR, proforma, growthSchedule, sotvEV,
+    epsCAGR, proforma, growthSchedule, sotvEV, sotpIsFallback,
   }
 }

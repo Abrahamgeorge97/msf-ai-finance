@@ -22,6 +22,7 @@ export const SCENARIO_PRESETS: Record<PresetKey, PresetValues> = {
     erp: 0.055,
     cost_of_debt: 0.045,
     hl: 2.5,
+    nwc_pct_rev: 0.03,
   },
   Bull: {
     yr1_g: 0.045,
@@ -41,6 +42,7 @@ export const SCENARIO_PRESETS: Record<PresetKey, PresetValues> = {
     erp: 0.055,
     cost_of_debt: 0.040,
     hl: 2.5,
+    nwc_pct_rev: 0.03,
   },
   Bear: {
     yr1_g: 0.005,
@@ -60,6 +62,7 @@ export const SCENARIO_PRESETS: Record<PresetKey, PresetValues> = {
     erp: 0.055,
     cost_of_debt: 0.050,
     hl: 2.5,
+    nwc_pct_rev: 0.03,
   },
 }
 

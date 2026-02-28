@@ -117,6 +117,7 @@ export interface Assumptions {
   erp: number           // equity risk premium (e.g. 0.055)
   cost_of_debt: number  // pre-tax cost of debt (e.g. 0.045)
   hl: number            // H-Model DDM half-life (e.g. 2.5 years)
+  nwc_pct_rev?: number  // % of incremental revenue invested in NWC (default 0.03)
 }
 
 export type Signal = "BUY" | "HOLD" | "SELL" | "N/A"
@@ -142,6 +143,7 @@ export interface ProFormaRow {
   net_income: number
   ebitda: number
   capex: number
+  delta_nwc: number     // change in net working capital (positive = cash outflow)
   fcff: number
   fcfe: number
   dividends: number

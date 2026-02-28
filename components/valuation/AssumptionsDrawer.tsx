@@ -45,6 +45,7 @@ const FIELDS: FieldDef[] = [
   { key: "target_ebitda_m", label: "Target EBITDA Margin", unit: "%", min: 5, max: 60, step: 0.5, decimals: 1, group: "Margins & Tax" },
   { key: "tax_rate",      label: "Tax Rate",         unit: "%", min: 0,   max: 40,   step: 0.5,  decimals: 1, group: "Margins & Tax", hint: "Affects NOPAT in DCF" },
   { key: "capex_pct",     label: "CapEx % Revenue",  unit: "%", min: 0.5, max: 15,   step: 0.25, decimals: 2, group: "Margins & Tax" },
+  { key: "nwc_pct_rev",   label: "NWC % Incremental Rev", unit: "%", min: -5, max: 15, step: 0.25, decimals: 2, group: "Margins & Tax", hint: "NWC investment per $1 of new revenue" },
 ]
 
 const GROUPS = [...new Set(FIELDS.map((f) => f.group))]

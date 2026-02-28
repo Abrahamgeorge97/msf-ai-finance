@@ -64,7 +64,7 @@ export function FootballFieldTab({ config, computed, mcResults }: Props) {
   const {
     pps_fcff, pps_fcfe, pps_ri, pps_ddm, pps_hddm,
     pps_ebitda, pps_rev, pps_pe, pps_jpe, pps_jpb,
-    pps_peg, pps_pb, pps_pcf, pps_sotp,
+    pps_peg, pps_pb, pps_pcf, pps_sotp, sotpIsFallback,
   } = computed
 
   // Build allMethods — only include non-zero models
@@ -82,7 +82,8 @@ export function FootballFieldTab({ config, computed, mcResults }: Props) {
     PEG:               pps_peg,
     "P/B":             pps_pb,
     "Revenue Multiple":pps_rev,
-    SOTP:              pps_sotp,
+    // Issue 3: exclude SOTP when it's a fallback (no segments configured) — re-normalize without it
+    SOTP:              sotpIsFallback ? 0 : pps_sotp,
   }
 
   // Filter out zero/negative values (models with missing data)
@@ -236,6 +237,11 @@ export function FootballFieldTab({ config, computed, mcResults }: Props) {
           </tbody>
         </table>
       </div>
+      {sotpIsFallback && (
+        <p className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border bg-muted/10">
+          SOTP excluded from blended valuation — configure business segments in the SOTP tab to include it.
+        </p>
+      )}
     </div>
   )
 }

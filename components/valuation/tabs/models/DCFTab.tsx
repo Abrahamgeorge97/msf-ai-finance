@@ -39,6 +39,14 @@ export function DCFTab({ config, computed }: Props) {
   const { pps, ev, pvFcfs, pvTv } = dcfPrice(fcffs, tv, a.wacc, B.net_debt, B.shares_diluted)
   const vsMarket = B.current_price > 0 ? ((pps / B.current_price) - 1) * 100 : 0
 
+  // Issue 11: Terminal Value % of total EV
+  const tvPct = (pvFcfs + pvTv) > 0 ? pvTv / (pvFcfs + pvTv) : 0
+  const tvPctHigh = tvPct > 0.80
+
+  // Issue 8: WACC comparison — manual vs CAPM
+  const waccDiff = Math.abs(a.wacc - computed.wacc_calc)
+  const waccDiffers = waccDiff > 0.005
+
   // Sensitivity: WACC vs Terminal Growth
   const wacc_r = [-0.015, -0.010, -0.005, 0, 0.005, 0.010, 0.015].map((d) => a.wacc + d)
   const tg_r = [-0.010, -0.005, 0, 0.005, 0.010].map((d) => a.terminal_g + d)
@@ -82,11 +90,27 @@ export function DCFTab({ config, computed }: Props) {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <MetricCard label="Enterprise Value" value={fmtUsd(ev) + "M"} />
         <MetricCard label="Equity Value" value={fmtUsd(ev - B.net_debt) + "M"} />
         <MetricCard label="Price / Share" value={fmtUsd(pps, 2)} delta={`${vsMarket >= 0 ? "+" : ""}${vsMarket.toFixed(1)}% vs market`} deltaPositive={vsMarket >= 0} />
         <MetricCard label="Terminal Value" value={fmtUsd(tv) + "M"} />
+        {/* Issue 11: TV% disclosure */}
+        <MetricCard
+          label="TV / Total EV"
+          value={`${(tvPct * 100).toFixed(0)}%`}
+          delta={tvPctHigh ? "TV dominates — sensitive to g and WACC" : undefined}
+          deltaPositive={false}
+          className={tvPctHigh ? "border-amber-500/40 bg-amber-500/5" : undefined}
+        />
+      </div>
+
+      {/* Issue 8: WACC comparison note */}
+      <div className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs font-mono border ${waccDiffers ? "border-amber-500/40 bg-amber-500/5 text-amber-400" : "border-border bg-muted/20 text-muted-foreground"}`}>
+        <span>Manual WACC (used in DCF): {fmtPct(a.wacc)}</span>
+        <span className="opacity-40">·</span>
+        <span>CAPM-derived WACC: {fmtPct(computed.wacc_calc)}</span>
+        {waccDiffers && <span className="ml-auto font-semibold">⚠ WACC inputs differ — review assumptions</span>}
       </div>
 
       {/* Bridge */}

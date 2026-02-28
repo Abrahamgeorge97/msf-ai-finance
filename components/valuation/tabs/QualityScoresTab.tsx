@@ -276,6 +276,11 @@ export function QualityScoresTab({ config }: Props) {
             ))}
           </div>
         </div>
+        {/* Issue 9: X1 data limitation footnote */}
+        <p className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border bg-muted/10">
+          * Working Capital / Assets (X1) estimated at 10% — current balance sheet data unavailable from EDGAR XBRL.
+          Actual current ratio may vary materially.
+        </p>
       </SectionCard>
 
       {/* ── Cash Flow Quality ────────────────────────────────────────────────── */}

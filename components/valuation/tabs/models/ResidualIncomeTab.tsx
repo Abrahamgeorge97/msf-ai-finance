@@ -96,6 +96,14 @@ export function ResidualIncomeTab({ config, computed }: Props) {
             ))}
           </tbody>
         </table>
+        {/* Issue 10: Clean surplus assumption disclosure */}
+        <div className="px-4 py-2 border-t border-border bg-muted/10">
+          <p className="text-[10px] text-muted-foreground">
+            <span className="font-semibold">Clean Surplus Assumption:</span> BV_t = BV_{"{t−1}"} + EPS × plowback.
+            Share repurchases and stock-based compensation are not modeled.
+            RI value may be overstated for companies with significant buyback programs.
+          </p>
+        </div>
       </div>
 
       {/* RI projection table */}
