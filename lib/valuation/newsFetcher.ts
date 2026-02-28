@@ -16,8 +16,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   Guidance:         ["guidance", "outlook", "forecast", "raises", "lowers", "expects", "projects", "full-year", "full year"],
   "M&A":            ["acquisition", "acquire", "merger", "takeover", "deal", "purchase", "divest", "spin-off", "spinoff"],
   Regulation:       ["regulation", "regulatory", "FDA", "SEC", "antitrust", "compliance", "approval", "ruling", "investigation"],
-  "Product Strategy":["product", "launch", "innovation", "patent", "new model", "technology", "R&D", "pipeline"],
-  Litigation:       ["lawsuit", "litigation", "settlement", "court", "sue", "legal", "verdict", "indictment"],
+  "Product Strategy":["product", "launch", "innovation", "new model", "technology", "R&D", "pipeline"],
+  Litigation:       ["lawsuit", "litigation", "settlement", "court", "sue", "legal", "verdict", "indictment", "patent"],
   "Macro Exposure": ["inflation", "interest rate", "fed ", "federal reserve", "recession", "economy", "tariff", "trade war", "GDP"],
 }
 

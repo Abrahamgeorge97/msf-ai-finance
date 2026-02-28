@@ -185,23 +185,22 @@ describe("computePCF", () => {
 
 describe("computeJustifiedPE", () => {
   it("justified P/E = payout / (r - g)", () => {
-    const B = makeBaseline({ roe: 0.20, plowback_ratio: 0.70, payout_ratio: 0.30, eps: 5.85 })
+    // Use roe = 0.12 so naturalG = 0.12 × 0.70 = 0.084 < ke = 0.098 (valid inputs)
+    const B = makeBaseline({ roe: 0.12, plowback_ratio: 0.70, payout_ratio: 0.30, eps: 5.85 })
     const a = makeAssumptions({ yr1_g: 0.025 })
     const ke = 0.098
     const { justifiedPE } = computeJustifiedPE(B, a, ke)
-    // g = min(ROE × b, ke - 0.001) = min(0.20 × 0.70, 0.097) = min(0.14, 0.097) = 0.097
-    // payout = 0.30
-    // justifiedPE = 0.30 / (0.098 - 0.097) = very large...
-    // Actually that's a degenerate case. Let's just verify it's positive and finite
+    // g = 0.084, payout = 0.30, justifiedPE = 0.30 / (0.098 - 0.084) ≈ 21.4
     expect(justifiedPE).toBeGreaterThan(0)
     expect(isFinite(justifiedPE)).toBe(true)
   })
 
   it("higher cost of equity reduces justified P/E", () => {
+    // naturalG = 0.15 × 0.60 = 0.09; both ke values must exceed naturalG
     const B = makeBaseline({ roe: 0.15, plowback_ratio: 0.60, payout_ratio: 0.40, eps: 5.85 })
     const a = makeAssumptions({ yr1_g: 0.025 })
-    const { justifiedPE: low }  = computeJustifiedPE(B, a, 0.12)
-    const { justifiedPE: high } = computeJustifiedPE(B, a, 0.09)
+    const { justifiedPE: low }  = computeJustifiedPE(B, a, 0.14)  // high ke → low P/E
+    const { justifiedPE: high } = computeJustifiedPE(B, a, 0.11)  // low ke → high P/E
     // lower ke → higher justified P/E
     expect(high).toBeGreaterThan(low)
   })

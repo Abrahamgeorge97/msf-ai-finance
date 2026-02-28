@@ -27,10 +27,13 @@ export function buildProforma(
     const ebitdaM = B.ebitda_margin + marginProg * (a.target_ebitda_m - B.ebitda_margin)
     const cogs = rev * cogs_pct
     const gp = rev - cogs
-    const sga = rev * sga_pct
-    const op_inc = gp - sga
     const da = rev * da_pct
-    const ebitda = op_inc + da
+    // Drive EBITDA from the progressing margin target, then back out EBIT.
+    // Avoids double-counting D&A: ebitdaM already encodes the full EBITDA margin;
+    // adding da separately on top of a fixed-cost op_inc would count D&A twice.
+    const ebitda = rev * ebitdaM
+    const op_inc = Math.max(0, ebitda - da)
+    const sga = Math.max(0, gp - op_inc)   // residual for display; absorbs margin improvement
     const interest = rev * int_pct
     const pretax = op_inc - interest
     const tax = pretax > 0 ? pretax * B.tax_rate : 0
@@ -230,10 +233,11 @@ export function computeJustifiedPE(
 ): { pps_jpe: number; justifiedPE: number } {
   const roe = B.roe > 0 ? B.roe : 0.10
   const b = B.plowback_ratio > 0 ? B.plowback_ratio : 1 - B.payout_ratio
-  const g = Math.min(roe * b, ke - 0.001) // g must be < r
+  const naturalG = roe * b
+  // Return 0 when natural g >= r — model is degenerate (negative denominator)
+  if (ke <= naturalG) return { pps_jpe: 0, justifiedPE: 0 }
+  const g = Math.min(naturalG, ke - 0.001) // secondary safety clamp
   const r = ke
-
-  if (r <= g) return { pps_jpe: 0, justifiedPE: 0 }
 
   const payout = 1 - b
   const justifiedPE = payout / (r - g)
