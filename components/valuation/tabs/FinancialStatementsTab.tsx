@@ -223,7 +223,7 @@ function IncomeStatementSection({ config }: { config: ValuationConfig }) {
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
             />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number, name: string) =>
                 name.includes("Margin")
                   ? [`${v.toFixed(1)}%`, name]
@@ -379,7 +379,7 @@ function CashFlowSection({ config }: { config: ValuationConfig }) {
             <XAxis dataKey="year" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number, name: string) => [`$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`, name]}
             />
             <Legend formatter={(v) => <span className="text-xs text-muted-foreground">{v}</span>} />
@@ -598,7 +598,7 @@ function BalanceSheetSection({ config }: { config: ValuationConfig }) {
             <XAxis dataKey="year" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <YAxis tickFormatter={(v) => `$${v.toFixed(0)}`} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number) => [`$${v.toFixed(2)}`, "BVPS"]}
             />
             <Bar dataKey="bvps" name="BVPS ($)" fill={H.bvps[H.bvps.length - 1] > H.bvps[0] ? "#22C55E" : "#EF4444"} opacity={0.85} radius={[3, 3, 0, 0]} />

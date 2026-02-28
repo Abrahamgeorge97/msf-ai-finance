@@ -192,7 +192,7 @@ export function DDMTab({ config, computed }: Props) {
             <XAxis dataKey="year" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number) => [`$${v.toFixed(2)}`, "DPS"]}
             />
             <Area type="monotone" dataKey="dividend" name="DPS" stroke="#16A34A" fill="#16A34A" fillOpacity={0.20} strokeWidth={2} />

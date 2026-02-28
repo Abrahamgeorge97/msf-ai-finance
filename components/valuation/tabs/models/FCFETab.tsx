@@ -136,7 +136,7 @@ export function FCFETab({ config, computed }: Props) {
             <XAxis dataKey="year" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number) => [fmtUsd(v) + "M"]}
             />
             <Area type="monotone" dataKey="fcff" name="FCFF" stroke="#2563EB" fill="#2563EB" fillOpacity={0.10} strokeWidth={2} />

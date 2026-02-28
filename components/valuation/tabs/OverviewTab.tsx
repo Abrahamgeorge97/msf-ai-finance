@@ -88,7 +88,7 @@ export function OverviewTab({ config, computed }: Props) {
               <YAxis yAxisId="left" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
               <YAxis yAxisId="right" orientation="right" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
               <Tooltip
-                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
                 labelStyle={{ color: "hsl(var(--foreground))" }}
                 formatter={(v: number) => [`$${v.toLocaleString()}M`]}
               />
@@ -109,7 +109,7 @@ export function OverviewTab({ config, computed }: Props) {
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
                 formatter={(v: number, name: string) => [`$${v.toLocaleString()}M`, name]}
               />
               <Legend iconType="circle" formatter={(v) => <span className="text-xs text-muted-foreground">{v}</span>} />

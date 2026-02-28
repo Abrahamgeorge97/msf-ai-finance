@@ -351,7 +351,7 @@ export function SOTPTab({ config, computed }: Props) {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
                   formatter={(v: number) => [fmtUsd(v, 0) + "M", "Segment EV"]}
                 />
               </PieChart>

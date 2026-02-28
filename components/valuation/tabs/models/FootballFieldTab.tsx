@@ -165,7 +165,7 @@ export function FootballFieldTab({ config, computed, mcResults }: Props) {
               width={115}
             />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(value: number, name: string) => [`$${value.toFixed(0)}`, name]}
             />
 

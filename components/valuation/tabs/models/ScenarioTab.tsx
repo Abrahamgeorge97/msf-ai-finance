@@ -148,7 +148,7 @@ export function ScenarioTab({ config, computed: _computed }: Props) {
             <XAxis dataKey="scenario" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <YAxis tickFormatter={(v: number) => fmtUsd(v, 0)} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number) => [fmtUsd(v, 2), "Price / Share"]}
             />
             <Bar dataKey="pps" radius={[4, 4, 0, 0]}>

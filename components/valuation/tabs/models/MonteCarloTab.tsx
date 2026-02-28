@@ -152,7 +152,7 @@ export function MonteCarloTab({ config, computed, onComplete }: Props) {
                 />
                 <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
                 <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
                   formatter={(v: number) => [`${v} paths`, "Count"]}
                 />
                 <ReferenceLine

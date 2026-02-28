@@ -77,7 +77,7 @@ export function ReverseDCFTab({ config, computed: _computed }: Props) {
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
             />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number) => [fmtUsd(v, 2), "Intrinsic Value"]}
               labelFormatter={(v: number) => `Growth: ${(v * 100).toFixed(1)}%`}
             />

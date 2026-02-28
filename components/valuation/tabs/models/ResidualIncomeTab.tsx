@@ -141,7 +141,7 @@ export function ResidualIncomeTab({ config, computed }: Props) {
             <XAxis dataKey="year" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
             <Tooltip
-              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6 }}
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 6, color: "hsl(var(--foreground))" }}
               formatter={(v: number, name: string) => [`$${v.toFixed(2)}`, name]}
             />
             <Area type="monotone" dataKey="ri" name="RI" stroke="#7C3AED" fill="#7C3AED" fillOpacity={0.20} strokeWidth={2} />
