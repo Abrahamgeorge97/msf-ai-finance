@@ -85,6 +85,7 @@ export interface XbrlFundamentals {
     ocf: number[]
     capex: number[]
     bvps: number[]
+    da: number[]   // per-year D&A (millions); may be 0 if XBRL concept absent
   }
 
   cik: string
@@ -233,6 +234,9 @@ export async function fetchXbrlFundamentals(cik: string): Promise<XbrlFundamenta
       "DepreciationDepletionAndAmortization",
       "DepreciationAndAmortization",
       "Depreciation",
+      "DepreciationAmortizationAndAccretionNet",
+      "OtherDepreciationAndAmortization",
+      "DepreciationNonproduction",
     ])
     const epsDilArr = firstConcept(gaap, [
       "EarningsPerShareDiluted",
@@ -416,6 +420,7 @@ export async function fetchXbrlFundamentals(cik: string): Promise<XbrlFundamenta
         ocf:         slice(ocfVals).map((v) => v / M),
         capex:       slice(capexVals).map((v) => v / M),
         bvps:        slice(bvpsVals),
+        da:          slice(daVals).map((v) => v / M),
       },
 
       cik: String(data.cik).padStart(10, "0"),

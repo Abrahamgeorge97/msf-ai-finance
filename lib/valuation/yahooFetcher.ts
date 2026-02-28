@@ -140,7 +140,6 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
 
   // Revenue / income
   const revenue    = xbrl?.revenue    ?? 0
-  const ebitda     = xbrl?.ebitda     ?? 0
   const netIncome  = xbrl?.net_income ?? 0
   const eps        = xbrl?.eps_diluted ?? n(ks.trailingEps)
   const dps        = xbrl?.dps        ?? n(sd.dividendRate ?? sd.lastDividendValue)
@@ -151,9 +150,14 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
   const cogs         = revenue - grossProfit
   const operatingInc = xbrl?.ebit     ?? 0
   const opMargin     = revenue > 0 ? operatingInc / revenue : 0
-  const ebitdaMargin = revenue > 0 ? ebitda / revenue : 0
   const sga          = Math.max(0, grossProfit - operatingInc)
-  const da           = xbrl?.da_total ?? 0
+
+  // D&A: use XBRL value; fall back to 3% of revenue if XBRL concept absent
+  const da = (xbrl?.da_total ?? 0) > 0 ? (xbrl?.da_total ?? 0) : revenue * 0.03
+
+  // EBITDA recomputed from EBIT + D&A so the fallback da is reflected
+  const ebitda       = operatingInc + da
+  const ebitdaMargin = revenue > 0 ? ebitda / revenue : 0
 
   // Balance sheet
   const totalDebt   = xbrl?.total_debt   ?? 0
@@ -189,9 +193,13 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
 
   const histYear:      number[] = hist?.year        ?? []
   const histRevenue:   number[] = hist?.revenue     ?? []
-  // Approximate EBITDA per period as EBIT + current-period D&A (close enough for chart display)
+  // Historical EBITDA = per-year EBIT + per-year D&A (fall back to 3% of revenue when D&A absent)
+  const histDa:        number[] = hist?.da           ?? []
   const histEbitda:    number[] = hist?.ebit
-    ? hist.ebit.map((e) => e + (xbrl?.da_total ?? 0))
+    ? hist.ebit.map((e, i) => {
+        const yearDa = (histDa[i] ?? 0) > 0 ? histDa[i] : (histRevenue[i] ?? 0) * 0.03
+        return e + yearDa
+      })
     : []
   const histNetIncome: number[] = hist?.net_income  ?? []
   const histEps:       number[] = hist?.eps_diluted ?? []
