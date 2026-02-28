@@ -104,7 +104,7 @@ export function NewsTab({ ticker, companyName, articles }: Props) {
   )
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">

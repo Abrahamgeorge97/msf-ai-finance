@@ -387,7 +387,7 @@ export function ExportTab({ config, assumptions: a, computed }: Props) {
   void _, void __, void ___
 
   return (
-    <div className="p-6 space-y-8 max-w-3xl">
+    <div className="p-6 space-y-8">
       <div className="space-y-1">
         <h2 className="text-lg font-bold text-foreground">Export</h2>
         <p className="text-sm text-muted-foreground">
