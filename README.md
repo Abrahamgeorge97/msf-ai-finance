@@ -1,137 +1,171 @@
-# MSF AI Finance — Equity Valuation Terminal (v2)
+# MSF AI Finance — Equity Valuation Terminal
 
-A professional, browser-based equity research platform that automatically fetches live financial data from **SEC EDGAR XBRL** and **Yahoo Finance**, then runs **14 institutional-grade valuation models** to produce a consensus Buy / Hold / Sell signal with interactive visualisations, scenario analysis, and an AI-powered research assistant.
+> *"Seconds, Not Hours: What Happens When a Finance Student Replaces the Analyst's Excel Model"*
+> — [Read the Substack post](https://substack.com/home/post/p-189725846)
 
-Built as the Next.js / TypeScript successor to the original Python / Streamlit platform, extending it with CFA Level 2 models, a real-time assumptions drawer, and a production-quality UI.
+**Live App:** [valuationweb.vercel.app](https://valuationweb.vercel.app)
+
+14 institutional-grade valuation models running simultaneously on any US-listed stock, powered by live SEC EDGAR data.
+
+![CI](https://github.com/Abrahamgeorge97/msf-ai-finance/actions/workflows/ci.yml/badge.svg)
 
 ---
 
-## Features
+## What It Does
 
-### Data Pipeline
-- **SEC EDGAR XBRL API** — extracts structured GAAP data directly from 10-K filings using 20+ concept mappings with intelligent fallback chains
-- **Yahoo Finance** — live market price, beta, and market cap (market data only)
-- All extracted figures verified against Allegion plc FY2023 10-K (ALLE reference case)
-- 1-hour server-side cache via Next.js `revalidate`
+Enter any US ticker (AAPL, MSFT, GOOGL...) and get a full institutional valuation in ~10 seconds:
 
-### 14 Valuation Models
+- **14 CFA-standard valuation models** computed simultaneously
+- **Live data** pulled directly from SEC EDGAR XBRL filings (no stale CSV files)
+- **Monte Carlo simulation** (5,000 runs) for probabilistic price ranges
+- **Earnings quality scoring** — Piotroski F, Altman Z, Beneish M, DuPont
+- **AI-powered analysis** via GPT-4o-mini Ask AI tab
+- **Scenario analysis** — Base / Bull / Bear with live recalculation
 
-| # | Model | Standard |
-|---|-------|----------|
-| 1 | FCFF (DCF) | CFA L1 |
-| 2 | FCFE (DCF) | CFA L2 |
-| 3 | Residual Income | CFA L2 |
-| 4 | DDM — 2-Stage + H-Model | CFA L2 |
-| 5 | EV/EBITDA Multiple | CFA L1 |
-| 6 | EV/Revenue Multiple | CFA L1 |
-| 7 | P/E Multiple | CFA L1 |
-| 8 | Justified P/E | CFA L2 |
-| 9 | PEG Ratio | CFA L1 |
-| 10 | P/B Multiple | CFA L1 |
-| 11 | Justified P/B | CFA L2 |
-| 12 | P/CF Multiple | CFA L1 |
-| 13 | SOTP (Sum-of-the-Parts) | IB standard |
-| 14 | Football Field (composite) | IB standard |
+---
 
-### Consensus Signal System
-- **BUY** — intrinsic value > market price + 15%
-- **HOLD** — within ±15% of market price
-- **SELL** — intrinsic value < market price − 15%
-- Weighted consensus across all active models (zero-value models excluded)
+## Valuation Models
 
-### Scenario Analysis
-Three pre-tuned assumption presets:
+| Category | Models |
+|---|---|
+| DCF | FCFF, FCFE, Reverse DCF |
+| Dividend | DDM 2-Stage, H-Model DDM |
+| Income | Residual Income (Clean Surplus) |
+| Multiples | EV/EBITDA, Revenue, P/E, PEG, P/B, P/CF |
+| Justified | Justified P/E, Justified P/B |
+| Sum-of-Parts | SOTP (conglomerate segments) |
+| Simulation | Monte Carlo (5,000 paths) |
 
-| Scenario | WACC | Yr1 Growth | Target EBITDA Margin | Exit Multiple |
-|----------|------|------------|----------------------|---------------|
-| Base | 8.5% | 2.5% | 27.0% | 14.0× |
-| Bull | 7.5% | 4.5% | 30.0% | 17.0× |
-| Bear | 10.0% | 0.5% | 23.0% | 11.0× |
+---
 
-Live assumptions are adjustable via the **Assumptions Drawer** (gear icon) including CAPM inputs (Rf, ERP, β, cost of debt) with real-time WACC display.
+## Quality Scores
 
-### Additional Features
-- **News Tab** — Yahoo Finance + Google News RSS with keyword-based category and sentiment tagging
-- **Ask AI Tab** — OpenAI `gpt-4o-mini` chatbot grounded in live company financials and active assumptions
-- **Export Tab** — Word (.docx) and Excel (.xlsx) report generation
-- **Sensitivity Tables** — every model tab includes a two-axis sensitivity analysis
-- **Football Field Chart** — all 14 models visualised with weighted consensus overlay
+| Model | What It Measures |
+|---|---|
+| Piotroski F-Score | 9-signal profitability & leverage screen |
+| Altman Z-Score | Bankruptcy prediction (Altman 1968) |
+| Beneish M-Score | Earnings manipulation detection (Beneish 1999) |
+| DuPont Analysis | ROE decomposition — margin × turnover × leverage |
+| Cash Flow Quality | Sloan accrual ratio, FCF conversion, OCF/NI |
+| Earnings Flags | 8 forensic accounting red flags |
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript 5 |
-| UI | React 19, Tailwind CSS, shadcn/ui |
-| Charts | Recharts (interactive) |
-| Animations | Framer Motion |
-| AI | OpenAI SDK (`gpt-4o-mini`) |
-| Data — Fundamentals | SEC EDGAR XBRL API |
-| Data — Market | Yahoo Finance (`yahoo-finance2`) |
-| Export | `docx`, `xlsx` |
-| Testing | Vitest |
+|---|---|
+| Frontend | Next.js 16 (App Router), TypeScript, Tailwind CSS |
+| UI Components | shadcn/ui, Framer Motion, Recharts |
+| Data — Fundamentals | SEC EDGAR XBRL API (20+ concept fallbacks) |
+| Data — Market | yahoo-finance2 v3 (price, beta, shares) |
+| Data — Peers | Live sector peer comps (11 GICS sectors) |
+| AI | OpenAI GPT-4o-mini |
+| Testing | Vitest (77 unit tests) |
+| CI/CD | GitHub Actions → Vercel |
 
 ---
 
-## Getting Started
+## CI/CD Pipeline
 
-### Prerequisites
-- Node.js 18+
-- npm 9+
+Every push to `master` automatically:
 
-### Installation
-
-```bash
-git clone <repo-url>
-cd valuation_web
-npm install
+```
+Push → GitHub Actions
+         ├── Run Tests (77 unit tests via Vitest)
+         └── Build Check (Next.js + TypeScript)
+                  └── Vercel Auto-Deploy
 ```
 
-### Environment Variables
-
-Create a `.env.local` file in the project root (this file is **not included in the repo** — never commit API keys):
-
-```env
-OPENAI_API_KEY=sk-...          # Required for Ask AI tab (get one at platform.openai.com)
-NEXT_PUBLIC_BASE_URL=http://localhost:3000
-```
-
-> The OpenAI key is only required for the Ask AI tab. All 14 valuation models, charts, news, and export work without it.
-
-### Running the App
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser. Enter any US public equity ticker (e.g. `AAPL`, `MSFT`, `ALLE`) to load the valuation dashboard.
+Tests must pass before the build runs. Build must pass before Vercel deploys.
 
 ---
 
-## Running Tests
+## Data Architecture
 
-```bash
-npm test
+```
+SEC EDGAR XBRL API
+  └── 20+ concept fallbacks per field
+  └── Annual/instant fact disambiguation
+  └── Per-year D&A, EBITDA, OCF, CapEx arrays
+
+Yahoo Finance (yahoo-finance2 v3)
+  └── Live price, beta, shares, EPS, DPS, BVPS
+
+Live Peer Comps (peerFetcher.ts)
+  └── 11 GICS sectors × 10 candidate tickers
+  └── 4 peers selected per ticker
+  └── EV/EBITDA, P/E, PEG, P/B, P/CF multiples
 ```
 
-For watch mode during development:
+---
 
-```bash
-npm run test:watch
-```
+## Validation
 
-### Test Coverage
+- **77/77 unit tests passing** — pure functions in `calculations.ts` tested independently
+- **TypeScript strict mode** — zero type errors on every build
+- **CI enforced** — no broken code can reach production
+- **CFA L3 review** — 16 analytical issues identified and fixed:
+  - FCFF correctly deducts ΔNWC
+  - DDM discounts at CAPM-derived ke (not manual override)
+  - P/E and PEG use NTM forward EPS
+  - Monte Carlo uses additive growth delta (not proportional)
+  - H-Model gS = 3-year average growth
+  - EPS CAGR filters to positive values only
 
-| Test File | What It Tests | Analogous Python Tests |
-|-----------|--------------|----------------------|
-| `__tests__/edgarXbrl.test.ts` | `pickAnnual`, `firstConcept` — XBRL filtering, fallback chains, deduplication | `TestExtractFact`, `TestGetAvailableFiscalYears` |
-| `__tests__/newsFetcher.test.ts` | `categorize`, `sentiment` — keyword matching, case insensitivity | `TestCategorize`, `TestSentiment` |
-| `__tests__/calculations.test.ts` | `computeWACC`, `computePCF`, `computeJustifiedPE`, `computeJustifiedPB`, `assignSignal`, formatters | `TestBuildBaseline` |
+---
 
-**Total: 57 test cases** covering the XBRL data pipeline, news processing, and CFA valuation model calculations.
+## DRIVER Methodology
+
+This project was built following the **DRIVER** framework for AI-assisted development:
+
+| Stage | What Happened |
+|---|---|
+| **Define** | Researched CFA valuation standards, SEC EDGAR XBRL taxonomy, existing tools |
+| **Represent** | Planned 14-model architecture, data pipeline, component structure |
+| **Implement** | Built iteratively — data layer → calculations → UI → quality scores |
+| **Validate** | 77 unit tests, CI pipeline, CFA L3 analytical review |
+| **Evolve** | Instructor feedback → peer comps, D&A fix, SOTP docs, CHANGELOG |
+| **Reflect** | 16 additional CFA fixes applied post-review |
+
+---
+
+## AI Log
+
+AI tools used: **Claude (Anthropic)** for code generation and architecture.
+
+### Development Sessions
+
+**Session 1 — Foundation**
+- Prompt: Build a Next.js valuation app with SEC EDGAR data pipeline
+- Output: Basic FCFF DCF with XBRL fetcher
+- Human modification: Added CAPM-derived WACC, adjusted fallback logic
+
+**Session 2 — 14 Models**
+- Prompt: Add CFA L2/L3 models — FCFE, RI, DDM, H-Model, multiples, justified ratios
+- Output: `calculations.ts` with pure functions, Monte Carlo, Reverse DCF
+- Human modification: Verified CFA formula correctness against textbook, added test suite
+
+**Session 3 — Data Quality**
+- Prompt: Fix D&A double-counting, add live peer comps, SOTP guidance
+- Output: `peerFetcher.ts` with 11-sector GICS map, per-year D&A arrays
+- Human modification: Tuned sector peer lists, verified XBRL concept fallbacks
+
+**Session 4 — CFA L3 Review**
+- Prompt: Fix 16 analytical issues identified in CFA review
+- Output: ΔNWC in FCFF, ke consistency in DDM, NTM EPS for P/E/PEG, additive MC growth
+- Human modification: Reviewed each fix against CFA standards before accepting
+
+**Session 5 — Quality & CI**
+- Prompt: Add Beneish M-Score, GitHub Actions CI/CD pipeline
+- Output: `computeBeneish()` function, `.github/workflows/ci.yml`
+- Human modification: Reviewed data availability constraints, added Est. disclosures
+
+### Key Human Decisions
+- Chose SEC EDGAR XBRL over Yahoo Finance for fundamentals (reliability)
+- Decided against hardcoded peer lists — required live fetching
+- Rejected proportional MC growth scaling in favor of additive delta
+- Chose to disclose data limitations (Est. labels) rather than hide them
 
 ---
 
@@ -140,178 +174,49 @@ npm run test:watch
 ```
 valuation_web/
 ├── app/
-│   ├── page.tsx                    # Landing page — ticker input
-│   ├── [ticker]/
-│   │   └── page.tsx                # Per-ticker valuation page (server component)
+│   ├── [ticker]/page.tsx        # Server component — fetches data
 │   └── api/
-│       ├── ask/route.ts            # OpenAI chat API endpoint
-│       └── data/route.ts           # Data fetching API endpoint
-├── components/
-│   └── valuation/
-│       ├── ValuationDashboard.tsx  # Main dashboard shell
-│       ├── ValuationSummaryCard.tsx # Consensus signal card
-│       ├── AssumptionsDrawer.tsx   # CAPM + growth sliders
-│       ├── FinanceTerminal.tsx     # Terminal-style AI chat UI
-│       └── tabs/
-│           ├── OverviewTab.tsx
-│           ├── ValuationModelsTab.tsx
-│           ├── NewsTab.tsx
-│           ├── ExportTab.tsx
-│           ├── AskAITab.tsx
-│           └── models/
-│               ├── DCFTab.tsx
-│               ├── FCFETab.tsx
-│               ├── ResidualIncomeTab.tsx
-│               ├── DDMTab.tsx
-│               ├── PETab.tsx
-│               ├── EVEBITDATab.tsx
-│               ├── PEGTab.tsx
-│               ├── PBTab.tsx
-│               ├── RevenueTab.tsx
-│               ├── PCFTab.tsx
-│               └── FootballFieldTab.tsx
-├── lib/
-│   └── valuation/
-│       ├── edgarXbrl.ts            # SEC EDGAR XBRL fetcher (server-only)
-│       ├── yahooFetcher.ts         # Yahoo Finance + data assembly (server-only)
-│       ├── newsFetcher.ts          # News fetching + categorisation (server-only)
-│       ├── dataFetcher.ts          # Top-level data orchestrator
-│       ├── calculations.ts         # All 14 valuation model functions (pure)
-│       └── presets.ts              # Scenario presets, CHART_COLORS
-├── types/
-│   └── valuation.ts                # Full TypeScript type definitions
-├── context/
-│   └── ScenarioContext.tsx         # Base/Bull/Bear scenario state
-├── hooks/
-│   ├── useValuationConfidence.ts
-│   └── useAssumptionsDrawer.ts
-├── __tests__/
-│   ├── edgarXbrl.test.ts
-│   ├── newsFetcher.test.ts
-│   └── calculations.test.ts
-├── vitest.config.ts
-├── .env.local                      # API keys (not committed)
-└── package.json
+│       ├── ask/route.ts         # GPT-4o-mini Ask AI endpoint
+│       └── data/[ticker]/       # Data API
+├── components/valuation/
+│   ├── tabs/models/             # DCF, DDM, RI, SOTP, Football Field...
+│   ├── tabs/QualityScoresTab.tsx # Piotroski, Altman Z, Beneish M, DuPont
+│   └── AssumptionsDrawer.tsx    # Live scenario controls
+├── lib/valuation/
+│   ├── calculations.ts          # Pure valuation functions (tested)
+│   ├── edgarXbrl.ts             # SEC EDGAR XBRL pipeline
+│   ├── peerFetcher.ts           # Live sector peer comps
+│   └── presets.ts               # Base/Bull/Bear scenario defaults
+├── __tests__/                   # 77 unit tests
+├── .github/workflows/ci.yml     # GitHub Actions CI/CD
+└── CHANGELOG.md                 # Staged development history
 ```
 
 ---
 
-## Architecture
+## Running Locally
 
-### XBRL Data Pipeline
-
-The EDGAR XBRL pipeline (`lib/valuation/edgarXbrl.ts`) fetches the `companyfacts` JSON for a given CIK and extracts all financial line items using concept fallback arrays:
-
-```
-Revenue:  RevenueFromContractWithCustomerExcludingAssessedTax
-          → Revenues → SalesRevenueNet → ...
-
-D&A:      DepreciationDepletionAndAmortization
-          → DepreciationAndAmortization → Depreciation
-          → DepreciationAmortizationAndAccretionNet
-          → OtherDepreciationAndAmortization
-          → DepreciationNonproduction
-          → fallback: Revenue × 3% if all concepts absent
-
-OCF:      NetCashProvidedByUsedInOperatingActivities
-          → NetCashProvidedByOperatingActivities
+```bash
+git clone https://github.com/Abrahamgeorge97/msf-ai-finance.git
+cd msf-ai-finance
+npm install
+# Add your API keys to .env.local (see .env.example)
+npm run dev     # http://localhost:3000
+npm run test    # Run 77 unit tests
+npm run build   # Production build + TypeScript check
 ```
 
-**Annual IS filtering** (`pickAnnual`): retains only 10-K/10-K/A/20-F/40-F entries with a filing duration of 300–400 days, deduplicated per fiscal year-end (latest filed wins).
-
-**Balance sheet alignment** (`pickInstant`): instant (point-in-time) facts are matched within ±7 days of each income statement fiscal year-end, keeping array lengths aligned across all series.
-
-**Fallback behaviour**: if EDGAR returns no XBRL data (foreign ADRs, some small-caps), all fundamentals fall back to Yahoo Finance.
-
-### CFA Valuation Functions
-
-All model functions in `lib/valuation/calculations.ts` are pure functions — they take inputs and return outputs with no side effects or API calls:
-
-```typescript
-// WACC — CFA Level 1
-computeWACC(rf, beta, erp, kd, T, marketCap, totalDebt)
-  → { wacc, ke, kd_after_tax }
-
-// FCFE — CFA Level 2
-computeFCFE(proforma, baseline, assumptions, ke)
-  → { pps_fcfe, ev_fcfe, fcfes }
-
-// Residual Income — CFA Level 2 (clean surplus)
-computeRI(baseline, assumptions, ke)
-  → { pps_ri, riRows }
-
-// H-Model DDM — CFA Level 2
-computeHModelDDM(baseline, assumptions, ke)
-  → pps_hddm
-
-// Justified P/E — CFA Level 2
-computeJustifiedPE(baseline, assumptions, ke)
-  → { pps_jpe, justifiedPE }
-
-// Justified P/B — CFA Level 2
-computeJustifiedPB(baseline, assumptions, ke)
-  → { pps_jpb, justifiedPB }
-
-// P/CF — CFA Level 1
-computePCF(baseline, medianPcf)
-  → { pps_pcf, cfoPerShare }
+**Required environment variables:**
+```
+OPENAI_API_KEY=your_key_here
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 
-### Football Field Weights
-
-The composite consensus weights (must sum to 1.0):
-
-| Model | Weight |
-|-------|--------|
-| FCFF (DCF) | 20% |
-| FCFE (DCF) | 10% |
-| Residual Income | 10% |
-| EV/EBITDA | 12% |
-| P/E | 8% |
-| Justified P/E | 7% |
-| Justified P/B | 5% |
-| P/CF | 7% |
-| DDM | 3% |
-| H-Model DDM | 2% |
-| PEG | 3% |
-| P/B | 3% |
-| Revenue | 5% |
-| SOTP | 5% |
+> Never commit API keys. `.env.local` is gitignored.
 
 ---
 
-## Caveats
+## Author
 
-- **US equities only** — XBRL data is available for SEC-registered companies. Foreign ADRs fall back to Yahoo Finance.
-- **Live peer comps** — sector peers are automatically selected from an 11-sector GICS map and fetched live from Yahoo Finance (EV/EBITDA, EV/Revenue, P/E, PEG, P/B, P/CF per peer).
-- **Price is fetched at load time** — does not refresh live during the session.
-- **SOTP is most meaningful for conglomerates** — for single-segment companies the model defaults to one "Core Business" row. It is designed for conglomerates like Alphabet (Search / YouTube / Cloud / Other Bets), Amazon (Retail / AWS / Advertising), or GE (Aerospace / Energy / Healthcare) where each division warrants a different EV/EBITDA multiple sourced from its own peer group. Custom segment data can be provided via `/public/data/{TICKER}.json`.
-
-### SOTP Reference Multiples by Sector (approximate)
-
-| Division Type | EV/EBITDA Range | Example |
-|---------------|----------------|---------|
-| Cloud / SaaS | 25–40× | AWS, Google Cloud |
-| Digital Advertising | 18–25× | YouTube, Meta |
-| Consumer Internet / Search | 15–22× | Google Search |
-| E-commerce / Retail | 10–15× | Amazon Retail |
-| Industrial / Aerospace | 14–20× | GE Aerospace |
-| Healthcare / MedTech | 18–25× | GE HealthCare |
-| Energy / Utilities | 8–14× | GE Vernova |
-| Financial Services | 10–15× | Berkshire Insurance |
-| Pre-revenue / R&D units | 0–5× | Meta Reality Labs |
-
----
-
-## Reference Case
-
-The platform ships with `ALLE` (Allegion plc) as a verified reference case. All figures extracted from EDGAR XBRL were verified against the actual FY2023 10-K filing — revenue, EBITDA, net income, EPS, DPS, D&A, CapEx, net debt, and shares outstanding all match exactly.
-
----
-
-## Acknowledgements
-
-- [SEC EDGAR XBRL API](https://www.sec.gov/developer) — free, authoritative source of GAAP financial data
-- [yahoo-finance2](https://github.com/gadicc/node-yahoo-finance2) — live market data
-- [CFA Institute Curriculum](https://www.cfainstitute.org) — valuation model frameworks
-- [Damodaran Online](https://pages.stern.nyu.edu/~adamodar/) — reference for valuation methodology
+**Abraham Tomy** — MSF Student  
+[Substack](https://substack.com/home/post/p-189725846) · [Live App](https://valuationweb.vercel.app)
