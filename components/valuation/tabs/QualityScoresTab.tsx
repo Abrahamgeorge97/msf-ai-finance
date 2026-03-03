@@ -108,6 +108,7 @@ export function QualityScoresTab({ config }: Props) {
   const cashQuality = useMemo(() => computeCashFlowQuality(B), [B])
   const dupont = useMemo(() => computeDuPont(B), [B])
   const flags = useMemo(() => computeEarningsFlags(B, H, n), [B, H, n])
+  const beneish = useMemo(() => computeBeneish(B, H, n), [B, H, n])
 
   // Overall quality score (0–100)
   const overallScore = useMemo(() => {
@@ -476,6 +477,71 @@ export function QualityScoresTab({ config }: Props) {
           These flags are quantitative screens, not accounting opinions. Always read the full 10-K notes for context.
         </p>
       </SectionCard>
+
+      {/* ── Beneish M-Score ──────────────────────────────────────────────────── */}
+      <SectionCard
+        title={`Beneish M-Score — ${beneish.mScore.toFixed(2)} (${beneish.zone})`}
+        subtitle="Earnings manipulation detection model (Beneish 1999). M > −2.22 suggests possible manipulation; M < −2.49 = likely non-manipulator. 8 financial statement ratios; variables marked Est. use neutral proxies where XBRL data is unavailable."
+      >
+        <QualityMeter score={clamp(-beneish.mScore, 0, 5)} max={5} />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Component</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variable</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Value</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Weight</th>
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contribution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {beneish.components.map((c) => (
+                <tr key={c.variable} className="border-b border-border/40 hover:bg-muted/20">
+                  <td className="px-3 py-2 text-xs text-foreground">
+                    {c.label}
+                    {c.estimated && <span className="ml-1.5 text-[10px] text-amber-400 font-semibold">Est.</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">{c.variable}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-foreground">{c.value}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground">{c.weight}</td>
+                  <td className="px-3 py-2 text-right font-mono text-xs text-blue-300">{c.contribution}</td>
+                </tr>
+              ))}
+              <tr className="border-t border-border bg-muted/30 font-semibold">
+                <td className="px-3 py-2 text-xs text-foreground font-semibold" colSpan={3}>M-Score = −4.84 + Σ(weight × variable)</td>
+                <td className="px-3 py-2" />
+                <td className={cn("px-3 py-2 text-right font-mono text-sm font-bold",
+                  beneish.zone === "Non-Manipulator" ? "text-green-400" : beneish.zone === "Grey Zone" ? "text-amber-400" : "text-red-400"
+                )}>
+                  {beneish.mScore.toFixed(2)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-3 border-t border-border">
+          <div className="flex gap-4 text-xs">
+            {[
+              { zone: "Non-Manipulator", range: "M < −2.49",    color: "text-green-400", current: beneish.zone === "Non-Manipulator" },
+              { zone: "Grey Zone",       range: "−2.49 to −2.22", color: "text-amber-400", current: beneish.zone === "Grey Zone" },
+              { zone: "Manipulator",     range: "M > −2.22",    color: "text-red-400",   current: beneish.zone === "Manipulator" },
+            ].map(({ zone, range, color, current }) => (
+              <div key={zone} className={cn("flex items-center gap-1.5", current ? color : "text-muted-foreground")}>
+                <span className={cn("w-2 h-2 rounded-full inline-block",
+                  current ? (color === "text-green-400" ? "bg-green-400" : color === "text-amber-400" ? "bg-amber-400" : "bg-red-400") : "bg-border"
+                )} />
+                <span className={current ? "font-semibold" : ""}>{zone}</span>
+                <span className="opacity-60">({range})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="px-4 py-2 text-[10px] text-muted-foreground border-t border-border bg-muted/10">
+          * Est. = neutral proxy (1.0) used — DSRI, AQI, DEPI, SGAI, LVGI require balance sheet detail not available from EDGAR XBRL companyfacts.
+          TATA and SGI are fully computed from live data. GMI uses EBITDA margin as a gross margin proxy.
+        </p>
+      </SectionCard>
     </div>
   )
 }
@@ -710,6 +776,78 @@ function computeDuPont(B: { net_income: number; revenue: number; total_assets: n
   const roa = B.total_assets > 0 ? B.net_income / B.total_assets : 0
   const roe = B.total_equity !== 0 ? B.net_income / B.total_equity : 0
   return { netMargin, assetTurnover, equityMultiplier, roa, roe }
+}
+
+// ── Beneish M-Score ────────────────────────────────────────────────────────────
+
+interface BeneishComponent {
+  label: string
+  variable: string
+  value: string
+  weight: string
+  contribution: string
+  estimated: boolean
+}
+
+function computeBeneish(
+  B: { net_income: number; ocf: number; total_assets: number; revenue: number; ebitda: number },
+  H: { revenue: number[]; ebitda: number[] },
+  n: number,
+): { mScore: number; components: BeneishComponent[]; zone: "Manipulator" | "Grey Zone" | "Non-Manipulator" } {
+  // 1. DSRI — Days Sales Receivable Index; no receivables in XBRL, set neutral
+  const DSRI = 1.0
+
+  // 2. GMI — Gross Margin Index; proxy with EBITDA margin (closest available)
+  const gmi_cur = n >= 1 && H.revenue[n - 1] > 0 ? H.ebitda[n - 1] / H.revenue[n - 1] : 0
+  const gmi_prv = n >= 2 && H.revenue[n - 2] > 0 ? H.ebitda[n - 2] / H.revenue[n - 2] : null
+  const GMI = gmi_prv !== null && gmi_cur > 0 ? gmi_prv / gmi_cur : 1.0
+  const gmi_est = gmi_prv === null
+
+  // 3. AQI — Asset Quality Index; no current assets / PPE in XBRL, set neutral
+  const AQI = 1.0
+
+  // 4. SGI — Sales Growth Index; fully computable
+  const SGI = n >= 2 && H.revenue[n - 2] > 0 ? H.revenue[n - 1] / H.revenue[n - 2] : 1.0
+  const sgi_est = n < 2
+
+  // 5. DEPI — Depreciation Index; no PPE in XBRL, set neutral
+  const DEPI = 1.0
+
+  // 6. SGAI — SGA Index; no historical SGA, set neutral
+  const SGAI = 1.0
+
+  // 7. LVGI — Leverage Index; no historical debt, set neutral
+  const LVGI = 1.0
+
+  // 8. TATA — Total Accruals to Total Assets; fully computable
+  const TATA = B.total_assets > 0 ? (B.net_income - B.ocf) / B.total_assets : 0
+
+  // Beneish (1999) probit model coefficients
+  const mScore = -4.84
+    + 0.920 * DSRI
+    + 0.528 * GMI
+    + 0.404 * AQI
+    + 0.892 * SGI
+    + 0.115 * DEPI
+    - 0.172 * SGAI
+    + 4.679 * TATA
+    - 0.327 * LVGI
+
+  const zone: "Manipulator" | "Grey Zone" | "Non-Manipulator" =
+    mScore > -2.22 ? "Manipulator" : mScore > -2.49 ? "Grey Zone" : "Non-Manipulator"
+
+  const components: BeneishComponent[] = [
+    { label: "Days Sales Receivable Index",      variable: "DSRI", value: DSRI.toFixed(3),  weight: "+0.920", contribution: (0.920 * DSRI).toFixed(3),   estimated: true },
+    { label: "Gross Margin Index (EBITDA proxy)", variable: "GMI",  value: GMI.toFixed(3),   weight: "+0.528", contribution: (0.528 * GMI).toFixed(3),    estimated: gmi_est },
+    { label: "Asset Quality Index",              variable: "AQI",  value: AQI.toFixed(3),   weight: "+0.404", contribution: (0.404 * AQI).toFixed(3),    estimated: true },
+    { label: "Sales Growth Index",               variable: "SGI",  value: SGI.toFixed(3),   weight: "+0.892", contribution: (0.892 * SGI).toFixed(3),    estimated: sgi_est },
+    { label: "Depreciation Index",               variable: "DEPI", value: DEPI.toFixed(3),  weight: "+0.115", contribution: (0.115 * DEPI).toFixed(3),   estimated: true },
+    { label: "SGA Expense Index",                variable: "SGAI", value: SGAI.toFixed(3),  weight: "−0.172", contribution: (-0.172 * SGAI).toFixed(3),  estimated: true },
+    { label: "Total Accruals / Total Assets",    variable: "TATA", value: TATA.toFixed(4),  weight: "+4.679", contribution: (4.679 * TATA).toFixed(3),   estimated: false },
+    { label: "Leverage Index",                   variable: "LVGI", value: LVGI.toFixed(3),  weight: "−0.327", contribution: (-0.327 * LVGI).toFixed(3),  estimated: true },
+  ]
+
+  return { mScore, components, zone }
 }
 
 // ── Earnings Quality Flags ─────────────────────────────────────────────────────
