@@ -66,11 +66,46 @@ export function DCFTab({ config, computed }: Props) {
     revenue: r.revenue,
   }))
 
+  const flags = config.dataFlags
+  const warnings: string[] = []
+  if (flags?.da_is_fallback)
+    warnings.push("D&A estimated at 3% of revenue (XBRL absent) — may overstate FCF for capital-intensive sectors (railroads, utilities: 8–20%)")
+  if (flags?.capex_is_fallback)
+    warnings.push("CapEx estimated at 2.5% of revenue (XBRL absent) — may understate for asset-heavy businesses")
+  if (flags?.ocf_missing)
+    warnings.push("Operating Cash Flow not found — FCFF computed from EBIT only; quality of earnings check unavailable")
+  if (flags?.data_age_days != null && flags.data_age_days > 365)
+    warnings.push(`10-K data is ${flags.data_age_days} days old (filed ${flags.filing_date}) — financials may be significantly stale`)
+
   return (
     <div className="space-y-6 p-4">
       <p className="text-sm text-muted-foreground font-mono">
         FCFF = EBIT × (1 − Tax Rate) + D&amp;A − CapEx
       </p>
+
+      {/* LTM indicator — shown when baseline uses trailing twelve months from 10-Q */}
+      {config.dataFlags?.ltm_available && (
+        <div className="flex items-center gap-2 rounded-md px-3 py-2 text-xs border border-green-500/30 bg-green-500/5 text-green-400">
+          <span className="font-bold">LTM</span>
+          <span className="opacity-60">·</span>
+          <span>
+            Baseline figures are <strong>Last Twelve Months ending {config.dataFlags.ltm_end_date}</strong>
+            {" "}(+{config.dataFlags.ltm_quarters_ahead}Q beyond last 10-K) — more current than annual filing.
+          </span>
+        </div>
+      )}
+
+      {/* Data quality warnings */}
+      {warnings.length > 0 && (
+        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3 space-y-1">
+          {warnings.map((w, i) => (
+            <p key={i} className="text-xs text-yellow-400 flex gap-2">
+              <span className="shrink-0">⚠</span>
+              <span>{w}</span>
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* TV method selector */}
       <div className="flex gap-2">

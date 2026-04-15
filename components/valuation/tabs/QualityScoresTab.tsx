@@ -137,8 +137,178 @@ export function QualityScoresTab({ config }: Props) {
     { metric: "DuPont ROE",    value: clamp(dupont.roe * 300, 0, 100) },
   ]
 
+  // ── Quality of Earnings metrics ──────────────────────────────────────────────
+  const qoe = useMemo(() => {
+    const rev   = B.revenue
+    const ni    = B.net_income
+    const ocf   = B.ocf
+    const da    = B.da_total
+    const capex = B.capex
+    const assets = B.total_assets
+
+    // Accruals Ratio (Jones Model): (NI − OCF) / Total Assets
+    // Close to 0 = clean earnings; highly positive = accrual manipulation risk
+    const accruals = assets > 0 ? (ni - ocf) / assets : null
+    const accrualsOk = accruals !== null && Math.abs(accruals) < 0.05
+
+    // Cash Conversion: OCF / NI
+    // > 1.0 = cash exceeds book earnings (healthy); < 0.7 = accruals-heavy
+    const cashConv = ni !== 0 ? ocf / ni : null
+    const cashConvOk = cashConv !== null && cashConv >= 0.8
+
+    // D&A Coverage: D&A / CapEx
+    // > 1.0 = depreciation exceeds investment (ageing asset base or conservative)
+    // < 0.5 = heavy investment mode
+    const daCoverage = capex > 0 ? da / capex : null
+    const daCoverageNote = daCoverage === null ? "N/A"
+      : daCoverage > 1.2 ? "Under-investing vs depreciation"
+      : daCoverage > 0.7 ? "Balanced"
+      : "Heavy capex investment mode"
+
+    // CapEx Intensity: CapEx / Revenue
+    const capexIntensity = rev > 0 ? capex / rev : 0
+
+    // Net Debt / EBITDA leverage
+    const leverageRatio = B.ebitda > 0 ? B.net_debt / B.ebitda : null
+    const leverageOk = leverageRatio !== null && leverageRatio < 3.0
+
+    // Revenue / Assets (asset turnover) — efficiency proxy
+    const assetTurnover = assets > 0 ? rev / assets : null
+
+    // Historical gross margin trend (expanding = positive)
+    const gmHistory = H.revenue.map((r, i) => {
+      const gp = r > 0 && H.net_income[i] !== undefined ? r : 0
+      return gp
+    })
+    const hmLen = H.revenue.length
+    const gmTrend = hmLen >= 3 && H.revenue[hmLen - 1] > 0 && H.revenue[hmLen - 3] > 0
+      ? (B.gross_margin - (H.net_income[hmLen - 3] / H.revenue[hmLen - 3])) * 100
+      : null  // can't reliably compute without stored gross profit history
+
+    return {
+      accruals, accrualsOk,
+      cashConv, cashConvOk,
+      daCoverage, daCoverageNote,
+      capexIntensity,
+      leverageRatio, leverageOk,
+      assetTurnover,
+      gmTrend,
+    }
+  }, [B, H])
+
+  const qoeRows: Array<{
+    label: string
+    value: string
+    status: "good" | "warn" | "bad" | "neutral"
+    note: string
+  }> = [
+    {
+      label: "Accruals Ratio  (NI − OCF) / Assets",
+      value: qoe.accruals !== null ? qoe.accruals.toFixed(3) : "N/A",
+      status: qoe.accruals === null ? "neutral"
+        : Math.abs(qoe.accruals) < 0.05 ? "good"
+        : Math.abs(qoe.accruals) < 0.10 ? "warn" : "bad",
+      note: qoe.accruals === null ? "OCF or Assets missing"
+        : Math.abs(qoe.accruals) < 0.05 ? "Clean — earnings well supported by cash"
+        : qoe.accruals > 0.10 ? "Caution — net income outpaces cash flow by a wide margin"
+        : qoe.accruals < -0.10 ? "Cash flow significantly exceeds book income"
+        : "Moderate accruals — within acceptable range",
+    },
+    {
+      label: "Cash Conversion  OCF / Net Income",
+      value: qoe.cashConv !== null ? qoe.cashConv.toFixed(2) + "×" : "N/A",
+      status: qoe.cashConv === null ? "neutral"
+        : qoe.cashConv >= 1.0 ? "good"
+        : qoe.cashConv >= 0.7 ? "warn" : "bad",
+      note: qoe.cashConv === null ? "OCF or Net Income missing"
+        : qoe.cashConv >= 1.0 ? "Excellent — cash earnings exceed book earnings"
+        : qoe.cashConv >= 0.7 ? "Acceptable — some accrual divergence"
+        : "Weak — earnings may be overstated vs cash reality",
+    },
+    {
+      label: "D&A / CapEx",
+      value: qoe.daCoverage !== null ? qoe.daCoverage.toFixed(2) + "×" : "N/A",
+      status: qoe.daCoverage === null ? "neutral"
+        : qoe.daCoverage >= 0.6 && qoe.daCoverage <= 1.5 ? "good"
+        : "warn",
+      note: qoe.daCoverageNote,
+    },
+    {
+      label: "CapEx Intensity  CapEx / Revenue",
+      value: pct(qoe.capexIntensity),
+      status: qoe.capexIntensity < 0.03 ? "good"
+        : qoe.capexIntensity < 0.08 ? "warn" : "neutral",
+      note: qoe.capexIntensity < 0.03 ? "Low capital intensity — asset-light"
+        : qoe.capexIntensity < 0.08 ? "Moderate capital requirements"
+        : "Capital-intensive business",
+    },
+    {
+      label: "Net Debt / EBITDA",
+      value: qoe.leverageRatio !== null ? qoe.leverageRatio.toFixed(2) + "×" : "N/A",
+      status: qoe.leverageRatio === null ? "neutral"
+        : qoe.leverageRatio < 1.5 ? "good"
+        : qoe.leverageRatio < 3.0 ? "warn" : "bad",
+      note: qoe.leverageRatio === null ? "EBITDA missing"
+        : qoe.leverageRatio < 0 ? "Net cash position (negative net debt)"
+        : qoe.leverageRatio < 1.5 ? "Low leverage"
+        : qoe.leverageRatio < 3.0 ? "Moderate leverage — monitor covenant headroom"
+        : "High leverage — credit risk elevated",
+    },
+    {
+      label: "Asset Turnover  Revenue / Assets",
+      value: qoe.assetTurnover !== null ? qoe.assetTurnover.toFixed(2) + "×" : "N/A",
+      status: qoe.assetTurnover === null ? "neutral"
+        : qoe.assetTurnover > 0.5 ? "good" : "warn",
+      note: qoe.assetTurnover === null ? "Total assets missing"
+        : qoe.assetTurnover > 1.0 ? "Efficient asset utilization"
+        : qoe.assetTurnover > 0.5 ? "Moderate asset efficiency"
+        : "Low asset turnover — asset-heavy or low revenue density",
+    },
+  ]
+
+  const statusIcon = (s: string) =>
+    s === "good" ? "✓" : s === "bad" ? "✗" : s === "warn" ? "⚠" : "—"
+  const statusColor = (s: string) =>
+    s === "good" ? "text-green-400" : s === "bad" ? "text-red-400" : s === "warn" ? "text-amber-400" : "text-muted-foreground"
+
   return (
     <div className="p-4 space-y-6">
+
+      {/* ── Quality of Earnings panel ── */}
+      <SectionCard
+        title="Quality of Earnings"
+        subtitle="Cash-flow-based checks to detect accrual inflation and balance sheet risk (Jones 1991, Sloan 1996)"
+      >
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border bg-muted/30">
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-6"></th>
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Metric</th>
+              <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Value</th>
+              <th className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground pl-4">Interpretation</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/40">
+            {qoeRows.map((row) => (
+              <tr key={row.label} className="hover:bg-muted/20">
+                <td className={cn("px-3 py-2 text-center text-sm font-bold", statusColor(row.status))}>
+                  {statusIcon(row.status)}
+                </td>
+                <td className="px-3 py-2 text-xs text-foreground font-mono">{row.label}</td>
+                <td className={cn("px-3 py-2 text-right text-xs font-semibold font-mono", statusColor(row.status))}>
+                  {row.value}
+                </td>
+                <td className="px-3 py-2 text-xs text-muted-foreground pl-4">{row.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="px-4 py-2 text-[10px] text-muted-foreground/50 border-t border-border bg-muted/10">
+          OCF = Operating Cash Flow (XBRL). Accruals Ratio close to 0 indicates high-quality earnings.
+          {config.dataFlags?.ltm_available && ` Figures based on LTM ending ${config.dataFlags.ltm_end_date}.`}
+        </div>
+      </SectionCard>
+
       {/* Summary row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className={cn("rounded-lg border px-4 py-3 text-center",

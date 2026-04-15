@@ -73,6 +73,23 @@ export interface CAPMData {
   cost_of_debt: number
 }
 
+/** Tracks which data fields used live XBRL vs estimated fallbacks. */
+export interface DataFlags {
+  da_is_fallback: boolean       // D&A = revenue × 3% (XBRL concept absent)
+  capex_is_fallback: boolean    // CapEx = revenue × 2.5% (XBRL concept absent)
+  ocf_missing: boolean          // OCF not found in XBRL
+  rf_source: "FRED" | "fallback"  // risk-free rate origin
+  rf_date: string               // date of FRED reading, e.g. "2026-04-10"
+  data_age_days: number         // days since 10-K filing date
+  hist_years: number            // number of years of historical data
+  filing_date: string           // 10-K filing date, e.g. "2024-03-15"
+  ltm_available: boolean        // true when LTM figures from 10-Q are used as baseline
+  ltm_end_date: string          // ISO date of most recent 10-Q period, e.g. "2025-09-30"
+  ltm_quarters_ahead: number    // 1 | 2 | 3 quarters beyond last annual
+  consensus_available: boolean  // true when FMP analyst estimates were loaded
+  consensus_analysts: number    // # analysts covering revenue (0 if unavailable)
+}
+
 export interface ValuationConfig {
   ticker: string
   name: string
@@ -92,6 +109,14 @@ export interface ValuationConfig {
   disclaimer?: string
   pb_note?: string
   ev_chart_current_multiple?: number
+  dataFlags?: DataFlags         // data quality metadata — used for UI warnings
+  consensus?: {
+    yr1_g: number
+    yr2_g: number
+    yr3_g: number
+    analysts: number
+    source: "FMP"
+  }
 }
 
 export interface Assumptions {

@@ -16,6 +16,78 @@ interface Props {
   computed: ComputedValuations
 }
 
+// ── Data quality heuristics ────────────────────────────────────────────────────
+// Each check tests whether a key field came from authoritative XBRL data
+// (non-zero, non-fallback) vs a rough industry-average approximation.
+function buildQualityFlags(config: ValuationConfig) {
+  const B = config.baseline
+  const H = config.historical_is
+  const rev = B.revenue
+
+  const flags = [
+    {
+      label: "Revenue (XBRL)",
+      ok: rev > 0,
+      note: rev > 0 ? "From SEC 10-K filing" : "Missing",
+    },
+    {
+      label: "D&A (XBRL)",
+      // If D&A is exactly 3% of revenue it's the fallback estimate, not real data
+      ok: B.da_total > 0 && Math.abs(B.da_total / rev - 0.03) > 0.002,
+      note:
+        B.da_total > 0 && Math.abs(B.da_total / rev - 0.03) > 0.002
+          ? "From SEC 10-K filing"
+          : "Estimated at 3% of revenue — may be inaccurate for this sector",
+    },
+    {
+      label: "CapEx (XBRL)",
+      // If CapEx is exactly 2.5% of revenue it's the fallback estimate
+      ok: B.capex > 0 && Math.abs(B.capex / rev - 0.025) > 0.002,
+      note:
+        B.capex > 0 && Math.abs(B.capex / rev - 0.025) > 0.002
+          ? "From SEC 10-K filing"
+          : "Estimated at 2.5% of revenue — may differ significantly",
+    },
+    {
+      label: "OCF (XBRL)",
+      ok: B.ocf > 0,
+      note: B.ocf > 0 ? "From SEC 10-K filing" : "Missing — FCF models less reliable",
+    },
+    {
+      label: "Balance Sheet (XBRL)",
+      ok: B.total_debt >= 0 && B.total_equity > 0,
+      note: B.total_equity > 0 ? "Debt & equity from SEC filing" : "Equity missing",
+    },
+    {
+      label: "Historical Data (3+ yrs)",
+      ok: H.revenue.length >= 3,
+      note:
+        H.revenue.length >= 3
+          ? `${H.revenue.length} years of history`
+          : `Only ${H.revenue.length} year(s) — trend analysis limited`,
+    },
+    {
+      label: "Live Peer Comps",
+      ok: Object.keys(config.comps ?? {}).length >= 2,
+      note:
+        Object.keys(config.comps ?? {}).length >= 2
+          ? `${Object.keys(config.comps).length} peers loaded`
+          : "Fewer than 2 peers — multiples less reliable",
+    },
+    {
+      label: "LTM Financials (10-Q)",
+      ok: config.dataFlags?.ltm_available ?? false,
+      note: config.dataFlags?.ltm_available
+        ? `Data current to ${config.dataFlags.ltm_end_date} (+${config.dataFlags.ltm_quarters_ahead}Q beyond last 10-K)`
+        : "Annual 10-K figures used — more recent 10-Q not available or not yet filed",
+    },
+  ]
+
+  const passed = flags.filter((f) => f.ok).length
+  const score = Math.round((passed / flags.length) * 100)
+  return { flags, score, passed, total: flags.length }
+}
+
 export function OverviewTab({ config, computed }: Props) {
   const { B, historical_is: H, segments: S, overview_metrics: M } = {
     B: config.baseline,
@@ -24,6 +96,7 @@ export function OverviewTab({ config, computed }: Props) {
     overview_metrics: config.overview_metrics,
   }
   const { signalRows, finalSignal, buys, holds, sells } = computed
+  const quality = buildQualityFlags(config)
 
   const histData = H.year.map((y, i) => ({
     year: String(y),
@@ -43,6 +116,49 @@ export function OverviewTab({ config, computed }: Props) {
         <MetricCard label="Adj. EBITDA" value={`$${B.adj_ebitda.toLocaleString("en-US")}M`} />
         <MetricCard label="FCF" value={`$${B.fcf.toLocaleString("en-US")}M`} delta={M.fcf_growth} deltaPositive={M.fcf_growth?.startsWith("+")} />
         <MetricCard label="Adj. EPS" value={`$${B.adj_eps.toFixed(2)}`} delta={M.adj_eps_growth} deltaPositive={M.adj_eps_growth?.startsWith("+")} />
+      </div>
+
+      {/* Data Quality card */}
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-foreground">Data Quality Score</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{quality.passed}/{quality.total} checks passed</span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              quality.score >= 80 ? "bg-green-500/15 text-green-400" :
+              quality.score >= 55 ? "bg-yellow-500/15 text-yellow-400" :
+              "bg-red-500/15 text-red-400"
+            }`}>
+              {quality.score}%
+            </span>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div className="w-full h-1.5 rounded-full bg-muted mb-3 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              quality.score >= 80 ? "bg-green-500" :
+              quality.score >= 55 ? "bg-yellow-500" : "bg-red-500"
+            }`}
+            style={{ width: `${quality.score}%` }}
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {quality.flags.map((flag) => (
+            <div key={flag.label} className="flex items-start gap-2 text-xs">
+              <span className={`mt-0.5 shrink-0 text-base leading-none ${flag.ok ? "text-green-400" : "text-yellow-400"}`}>
+                {flag.ok ? "✓" : "⚠"}
+              </span>
+              <div>
+                <span className={`font-medium ${flag.ok ? "text-foreground" : "text-yellow-400"}`}>{flag.label}</span>
+                <span className="text-muted-foreground ml-1">— {flag.note}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[10px] text-muted-foreground/60 leading-relaxed">
+          Source: {config.sources ?? "SEC EDGAR XBRL + Yahoo Finance"}
+        </p>
       </div>
 
       {/* Consensus signal */}

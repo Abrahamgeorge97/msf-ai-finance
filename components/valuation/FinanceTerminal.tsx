@@ -161,7 +161,7 @@ export function FinanceTerminal({ config, assumptions, className }: Props) {
         )
       }
     } catch {
-      push({ type: "error", content: "Error: could not reach API. Check your OPENAI_API_KEY." })
+      push({ type: "error", content: "Error: could not reach API. Check your ANTHROPIC_API_KEY in .env.local." })
     } finally {
       setLoading(false)
     }

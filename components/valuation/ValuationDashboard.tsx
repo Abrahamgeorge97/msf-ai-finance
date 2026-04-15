@@ -22,8 +22,76 @@ import { useValuationConfidence } from "@/hooks/useValuationConfidence"
 import { ScenarioProvider, ScenarioToggle, useScenario } from "@/context/ScenarioContext"
 import { AssumptionsDrawer } from "./AssumptionsDrawer"
 import { useAssumptionsDrawer } from "@/hooks/useAssumptionsDrawer"
-import { ArrowLeft, Settings2, FileText } from "lucide-react"
+import { ArrowLeft, Settings2, FileText, Users } from "lucide-react"
 import Link from "next/link"
+import type { Comp } from "@/types/valuation"
+
+// ── Peer override panel ───────────────────────────────────────────────────────
+
+function PeerOverridePanel({
+  onCompsUpdate,
+}: {
+  onCompsUpdate: (comps: Record<string, Comp>) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    const tickers = input.trim()
+    if (!tickers) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/peers?tickers=${encodeURIComponent(tickers)}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? "Failed")
+      onCompsUpdate(data.comps)
+      setOpen(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load peers")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        title="Override peer comparables"
+      >
+        <Users className="w-3.5 h-3.5" />
+        <span className="hidden lg:inline">Peers</span>
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 bg-muted/40 border border-border rounded-lg px-2 py-1">
+      <Users className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+      <input
+        autoFocus
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        placeholder="MSFT,GOOGL,META (comma-separated)"
+        className="bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 outline-none w-44"
+      />
+      <button
+        onClick={submit}
+        disabled={loading}
+        className="text-xs font-semibold text-blue-400 hover:text-blue-300 disabled:opacity-40"
+      >
+        {loading ? "…" : "Apply"}
+      </button>
+      <button onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
+      {error && <span className="text-xs text-red-400">{error}</span>}
+    </div>
+  )
+}
 
 type TopTab = "Overview" | "Financials" | "Valuation Models" | "Quality Scores" | "News" | "Export" | "Ask AI"
 const TOP_TABS: TopTab[] = ["Overview", "Financials", "Valuation Models", "Quality Scores", "News", "Export", "Ask AI"]
@@ -56,19 +124,20 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
   const { assumptions, setAssumption } = useScenario()
   const [activeTab, setActiveTab] = useState<TopTab>("Overview")
   const [mcResults, setMcResults] = useState<Record<string, number[]>>({})
+  const [comps, setComps] = useState<Record<string, Comp>>(config.comps)
   const drawer = useAssumptionsDrawer()
 
   const computed = useMemo(
     () =>
       computeAll(
         B,
-        config.comps,
+        comps,
         config.segments,
         config.acquisitions,
         config.historical_is.eps,
         assumptions,
       ),
-    [B, config.comps, config.segments, config.acquisitions, config.historical_is.eps, assumptions],
+    [B, comps, config.segments, config.acquisitions, config.historical_is.eps, assumptions],
   )
 
   const confidence = useValuationConfidence({
@@ -157,6 +226,9 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
           ))}
         </nav>
 
+        {/* Peer override */}
+        <PeerOverridePanel onCompsUpdate={setComps} />
+
         {/* Right side: price + signal + drawer trigger */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right hidden sm:block">
@@ -180,6 +252,16 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
         ticker={config.ticker}
         totalDebt={config.baseline.total_debt}
         marketCap={config.baseline.current_price * config.baseline.shares_diluted}
+        rfNote={
+          config.dataFlags?.rf_source === "FRED" && config.dataFlags.rf_date
+            ? `Live from FRED · ${config.dataFlags.rf_date}`
+            : "Using fallback default (4.30%)"
+        }
+        consensusNote={
+          config.dataFlags?.consensus_available && config.dataFlags.consensus_analysts > 0
+            ? `Pre-filled from ${config.dataFlags.consensus_analysts} analysts (FMP) — you can override`
+            : undefined
+        }
       />
 
       {/* Body */}
@@ -209,7 +291,7 @@ function DashboardInner({ config, news, sec }: Required<Props>) {
               )}
               {activeTab === "Valuation Models" && (
                 <ValuationModelsTab
-                  config={config}
+                  config={{ ...config, comps }}
                   computed={computed}
                   assumptions={assumptions}
                   mcResults={mcResults}

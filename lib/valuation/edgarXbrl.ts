@@ -38,6 +38,20 @@ interface XbrlCompanyFacts {
   }
 }
 
+/** LTM (Last Twelve Months) figures — available when a recent 10-Q extends beyond last 10-K. */
+export interface LtmData {
+  revenue: number       // LTM revenue (millions)
+  ebit: number          // LTM EBIT (millions)
+  net_income: number    // LTM net income (millions)
+  da_total: number      // LTM D&A (millions)
+  gross_profit: number  // LTM gross profit (millions)
+  ocf: number           // LTM operating cash flow (millions)
+  capex: number         // LTM capex (millions, positive)
+  ebitda: number        // LTM EBITDA = ebit + da_total (millions)
+  endDate: string       // ISO date of most recent quarter end, e.g. "2025-09-30"
+  quartersAhead: number // quarters beyond last annual (1 = Q1, 2 = Q2, 3 = Q3)
+}
+
 export interface XbrlFundamentals {
   // Current-period figures (millions unless noted)
   revenue: number
@@ -73,6 +87,9 @@ export interface XbrlFundamentals {
   net_debt: number        // = total_debt - cash
   tax_rate: number        // clamped 0–0.5
   payout_ratio: number    // = dps / eps_diluted
+
+  // LTM data (undefined if no recent 10-Q available beyond last 10-K)
+  ltm?: LtmData
 
   // Historical arrays (oldest → newest, up to 5 years)
   hist: {
@@ -187,6 +204,94 @@ function firstConceptInstant(
     }
   }
   return fyEnds.map(() => 0)
+}
+
+// ── LTM helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns all XBRL unit entries for the first matching concept name.
+ * Unlike firstConcept, this does NOT filter to annual-only entries.
+ */
+function allConceptValues(
+  gaap: Record<string, XbrlConcept>,
+  names: string[],
+  unit: "USD" | "shares" | "USD/shares" = "USD",
+): XbrlUnit[] {
+  for (const name of names) {
+    const c = gaap[name]
+    if (!c) continue
+    const vals = c.units[unit]
+    if (vals && vals.length > 0) return vals
+  }
+  return []
+}
+
+/**
+ * Find the most recent 10-Q YTD entry for a concept.
+ * For each distinct quarter-end date, picks the longest duration entry (= YTD, not single quarter).
+ * Q1 YTD ≈ 90d, Q2 YTD ≈ 180d, Q3 YTD ≈ 270d.
+ */
+function latestQtdYtd(vals: XbrlUnit[]): { entry: XbrlUnit; dur: number } | null {
+  const q = vals.filter((v) => v.form === "10-Q" && v.start && v.end)
+  if (q.length === 0) return null
+
+  // Group by end date, keep the longest-duration entry per group
+  const byEnd = new Map<string, { entry: XbrlUnit; dur: number }>()
+  for (const v of q) {
+    const dur = (new Date(v.end).getTime() - new Date(v.start!).getTime()) / 86_400_000
+    if (dur < 75 || dur > 290) continue  // exclude nonsensical durations
+    const ex = byEnd.get(v.end)
+    if (!ex || dur > ex.dur) byEnd.set(v.end, { entry: v, dur })
+  }
+
+  if (byEnd.size === 0) return null
+
+  // Return the entry with the most recent end date
+  const sorted = [...byEnd.values()].sort((a, b) =>
+    b.entry.end.localeCompare(a.entry.end),
+  )
+  return sorted[0]
+}
+
+/**
+ * Compute LTM (Last Twelve Months) raw value for a single flow concept.
+ * Formula: LTM = Last Annual + Current YTD - Prior Year same YTD.
+ * Returns null if there is no recent 10-Q or if prior-year YTD cannot be matched.
+ */
+function ltmVal(
+  annualArr: XbrlUnit[],  // pickAnnual output (sorted oldest→newest)
+  allArr: XbrlUnit[],      // all XBRL entries for this concept
+  lastAnnualEnd: string,
+): number | null {
+  if (annualArr.length === 0 || allArr.length === 0) return null
+
+  const latest = latestQtdYtd(allArr)
+  if (!latest) return null
+  if (latest.entry.end <= lastAnnualEnd) return null  // no quarterly data beyond last 10-K
+
+  const lastAnn = annualArr[annualArr.length - 1]
+  const { entry: curr, dur } = latest
+
+  // Locate the prior-year YTD entry (same duration ±25d, end date ≈1 year before curr.end)
+  const priorTarget = new Date(curr.end)
+  priorTarget.setFullYear(priorTarget.getFullYear() - 1)
+
+  const q = allArr.filter((v) => v.form === "10-Q" && v.start && v.end)
+  let best: XbrlUnit | null = null
+  let bestScore = Infinity
+
+  for (const v of q) {
+    const vDur = (new Date(v.end).getTime() - new Date(v.start!).getTime()) / 86_400_000
+    const endDiff = Math.abs(new Date(v.end).getTime() - priorTarget.getTime()) / 86_400_000
+    const durDiff = Math.abs(vDur - dur)
+    if (endDiff > 45 || durDiff > 25) continue
+    const score = endDiff * 2 + durDiff
+    if (score < bestScore) { bestScore = score; best = v }
+  }
+
+  if (!best) return null  // cannot reliably compute LTM without prior-year YTD
+
+  return lastAnn.val + curr.val - best.val
 }
 
 // ── Main fetcher ──────────────────────────────────────────────────────────────
@@ -380,6 +485,73 @@ export async function fetchXbrlFundamentals(cik: string): Promise<XbrlFundamenta
 
     const payout_curr = eps_curr > 0 && dps_curr > 0 ? Math.min(1, dps_curr / eps_curr) : 0
 
+    // ── LTM computation ───────────────────────────────────────────────────────
+    // Fetch all (unfiltered) XBRL entries for flow concepts to enable quarterly LTM math
+    const lastAnnualEnd = masterDates[masterDates.length - 1] ?? ""
+
+    const rawRevArr   = allConceptValues(gaap, [
+      "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
+      "SalesRevenueNet", "SalesRevenueGoodsNet", "RevenuesNetOfInterestExpense",
+    ])
+    const rawEbitArr  = allConceptValues(gaap, ["OperatingIncomeLoss"])
+    const rawNiArr    = allConceptValues(gaap, [
+      "NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersBasic", "ProfitLoss",
+    ])
+    const rawDaArr    = allConceptValues(gaap, [
+      "DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
+      "Depreciation", "DepreciationAmortizationAndAccretionNet",
+      "OtherDepreciationAndAmortization", "DepreciationNonproduction",
+    ])
+    const rawGpArr    = allConceptValues(gaap, ["GrossProfit"])
+    const rawOcfArr   = allConceptValues(gaap, [
+      "NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByOperatingActivities",
+    ])
+    const rawCapexArr = allConceptValues(gaap, [
+      "PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets",
+    ])
+
+    // Check if any 10-Q data exists beyond the last annual filing
+    const qtdYtdCheck = latestQtdYtd(rawRevArr)
+    const hasRecentQtd = !!qtdYtdCheck && qtdYtdCheck.entry.end > lastAnnualEnd
+
+    let ltm: LtmData | undefined
+    if (hasRecentQtd) {
+      const ltmRev  = ltmVal(revenueArr, rawRevArr,   lastAnnualEnd)
+      const ltmEbit = ltmVal(ebitArr,    rawEbitArr,   lastAnnualEnd)
+      const ltmNi   = ltmVal(netIncArr,  rawNiArr,     lastAnnualEnd)
+      const ltmDa   = ltmVal(daArr,      rawDaArr,     lastAnnualEnd)
+      const ltmGp   = ltmVal(grossProfitArr, rawGpArr, lastAnnualEnd)
+      const ltmOcf  = ltmVal(ocfArr,     rawOcfArr,    lastAnnualEnd)
+      const ltmCpx  = ltmVal(capexArr,   rawCapexArr,  lastAnnualEnd)
+
+      // Only publish LTM block if the two most critical fields computed successfully
+      if (ltmRev !== null && ltmEbit !== null) {
+        const ltmRevM  = ltmRev  / M
+        const ltmEbitM = ltmEbit / M
+        const ltmDaM   = (ltmDa  ?? 0) / M
+        const ltmNiM   = (ltmNi  ?? 0) / M
+        const ltmGpM   = (ltmGp  ?? 0) / M
+        const ltmOcfM  = (ltmOcf ?? 0) / M
+        const ltmCpxM  = ltmCpx !== null ? Math.abs(ltmCpx) / M : 0
+
+        const { entry: qtd, dur } = qtdYtdCheck!
+        const quartersAhead = dur <= 120 ? 1 : dur <= 200 ? 2 : 3
+
+        ltm = {
+          revenue:     ltmRevM,
+          ebit:        ltmEbitM,
+          net_income:  ltmNiM,
+          da_total:    ltmDaM,
+          gross_profit: ltmGpM,
+          ocf:         ltmOcfM,
+          capex:       ltmCpxM,
+          ebitda:      ltmEbitM + ltmDaM,
+          endDate:     qtd.end,
+          quartersAhead,
+        }
+      }
+    }
+
     // Determine filedDate and fiscalYearEnd from last entry
     const lastEntry = revenueArr[revenueArr.length - 1]
 
@@ -409,6 +581,7 @@ export async function fetchXbrlFundamentals(cik: string): Promise<XbrlFundamenta
       net_debt:         net_debt_curr,
       tax_rate:         tax_rate_curr,
       payout_ratio:     payout_curr,
+      ltm,
 
       hist: {
         year:        years,

@@ -134,9 +134,11 @@ interface Props {
   ticker: string
   totalDebt?: number    // $M — for WACC calculation display
   marketCap?: number    // $M — for WACC calculation display
+  rfNote?: string       // e.g. "Live from FRED · 2026-04-10" or "Fallback default"
+  consensusNote?: string // e.g. "Pre-filled from 28 analysts (FMP)" or undefined
 }
 
-export function AssumptionsDrawer({ open, onOpenChange, ticker, totalDebt = 0, marketCap = 0 }: Props) {
+export function AssumptionsDrawer({ open, onOpenChange, ticker, totalDebt = 0, marketCap = 0, rfNote, consensusNote }: Props) {
   const { assumptions, setAssumption, applyScenario, scenario } = useScenario()
 
   const reset = () => applyScenario(scenario)
@@ -184,9 +186,23 @@ export function AssumptionsDrawer({ open, onOpenChange, ticker, totalDebt = 0, m
                 ))}
               </div>
 
+              {/* After Revenue Growth group: show consensus badge if FMP data available */}
+              {group === "Revenue Growth" && consensusNote && (
+                <div className="flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2">
+                  <span className="text-[10px] font-bold text-blue-400">CONSENSUS</span>
+                  <span className="text-[10px] text-blue-300/80">{consensusNote}</span>
+                </div>
+              )}
+
               {/* After CAPM Inputs group: show computed outputs */}
               {group === "CAPM Inputs" && (
                 <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 space-y-1">
+                  {rfNote && (
+                    <p className={`text-[10px] mb-2 flex gap-1.5 items-center ${rfNote.includes("FRED") ? "text-green-400" : "text-yellow-400"}`}>
+                      <span>{rfNote.includes("FRED") ? "✓" : "⚠"}</span>
+                      <span>Risk-free rate: {rfNote}</span>
+                    </p>
+                  )}
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 mb-2">
                     Computed CAPM Outputs
                   </p>

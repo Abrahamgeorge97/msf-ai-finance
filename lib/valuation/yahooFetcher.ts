@@ -7,10 +7,12 @@
  */
 
 import YahooFinance from "yahoo-finance2"
-import type { ValuationConfig, Baseline, HistoricalIS, NewsArticle } from "@/types/valuation"
+import type { ValuationConfig, Baseline, HistoricalIS, NewsArticle, DataFlags } from "@/types/valuation"
 import { fetchXbrlFundamentals } from "./edgarXbrl"
 import { fetchNews } from "./newsFetcher"
 import { fetchPeerComps } from "./peerFetcher"
+import { fetchLiveRiskFreeRate } from "./fredFetcher"
+import { fetchConsensusEstimates } from "./fmpFetcher"
 
 const yahooFinance = new YahooFinance()
 
@@ -111,15 +113,24 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
     lookupCIK(T),
   ])
 
-  // ── Parallel fetch: 10-K metadata + XBRL fundamentals + news + peer comps ──
+  // ── Parallel fetch: 10-K metadata + XBRL fundamentals + news + peer comps + FRED rf ──
   const companyName = String((quote.price as { longName?: string; shortName?: string })?.longName ?? "")
   const sector = String((quote.assetProfile as { sector?: string })?.sector ?? "")
-  const [sec, xbrl, news, liveComps] = await Promise.all([
+  type PriceFull = { regularMarketPrice?: number; marketCap?: number }
+  const prFull = (quote.price ?? {}) as PriceFull
+  const approxMktCapM = prFull.marketCap ? prFull.marketCap / 1_000_000 : 0
+
+  const [sec, xbrl, news, liveComps, fredResult] = await Promise.all([
     cik ? fetchLatest10K(cik) : Promise.resolve(null),
     cik ? fetchXbrlFundamentals(cik) : Promise.resolve(null),
     fetchNews(T, companyName),
-    fetchPeerComps(T, sector),
+    fetchPeerComps(T, sector, undefined, approxMktCapM),
+    fetchLiveRiskFreeRate(),
   ])
+
+  // ── FMP consensus (needs XBRL revenue as baseline — run after xbrl resolves) ──
+  const baselineRevForConsensus = xbrl?.ltm?.revenue ?? xbrl?.revenue ?? 0
+  const consensus = await fetchConsensusEstimates(T, baselineRevForConsensus)
 
   // ── Yahoo market data (always live) ──────────────────────────────────────
   // Type assertions needed because reduced module set narrows types
@@ -137,23 +148,29 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
   const beta         = n(ks.beta ?? sd.beta, 1.0)
 
   // ── Fundamentals: XBRL primary, Yahoo fallback ────────────────────────────
+  // When a recent 10-Q exists, use LTM figures instead of the last annual 10-K.
+  // LTM = Last Annual + Current YTD - Prior Year YTD (industry-standard calculation).
+  const ltm = xbrl?.ltm
+  const usingLtm = !!ltm
 
   // Revenue / income
-  const revenue    = xbrl?.revenue    ?? 0
-  const netIncome  = xbrl?.net_income ?? 0
-  const eps        = xbrl?.eps_diluted ?? n(ks.trailingEps)
+  const revenue    = ltm?.revenue    ?? xbrl?.revenue    ?? 0
+  const netIncome  = ltm?.net_income ?? xbrl?.net_income ?? 0
+  const eps        = xbrl?.eps_diluted ?? n(ks.trailingEps)  // EPS from annual (diluted shares vary)
   const dps        = xbrl?.dps        ?? n(sd.dividendRate ?? sd.lastDividendValue)
 
   // Margins — compute from XBRL data
-  const grossProfit  = xbrl?.gross_profit ?? 0
+  const grossProfit  = ltm?.gross_profit ?? xbrl?.gross_profit ?? 0
   const grossMargin  = revenue > 0 ? grossProfit / revenue : 0
   const cogs         = revenue - grossProfit
-  const operatingInc = xbrl?.ebit     ?? 0
+  const operatingInc = ltm?.ebit     ?? xbrl?.ebit     ?? 0
   const opMargin     = revenue > 0 ? operatingInc / revenue : 0
   const sga          = Math.max(0, grossProfit - operatingInc)
 
-  // D&A: use XBRL value; fall back to 3% of revenue if XBRL concept absent
-  const da = (xbrl?.da_total ?? 0) > 0 ? (xbrl?.da_total ?? 0) : revenue * 0.03
+  // D&A: prefer LTM, then XBRL annual; fall back to 3% of revenue if absent
+  const daRaw = ltm?.da_total ?? xbrl?.da_total ?? 0
+  const da_is_fallback = daRaw <= 0
+  const da = da_is_fallback ? revenue * 0.03 : daRaw
 
   // EBITDA recomputed from EBIT + D&A so the fallback da is reflected
   const ebitda       = operatingInc + da
@@ -170,9 +187,13 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
   const sharesDil   = xbrl?.shares_diluted ?? n(ks.sharesOutstanding) / M
   const sharesBasic = xbrl?.shares_basic   ?? sharesDil
 
-  // Cash flow
-  const ocf         = xbrl?.ocf         ?? 0
-  const capex       = xbrl?.capex       ?? (revenue * 0.025)  // 2.5% fallback only if no XBRL data
+  // Cash flow — LTM preferred when available
+  const ocf         = ltm?.ocf  ?? xbrl?.ocf  ?? 0
+  const capexLtmRaw = ltm?.capex
+  const capexXbrl   = xbrl?.capex
+  const capexRaw    = capexLtmRaw ?? capexXbrl
+  const capex_is_fallback = (capexRaw == null || capexRaw <= 0) && !usingLtm
+  const capex       = (capexRaw != null && capexRaw > 0) ? capexRaw : revenue * 0.025
   const netBorrow   = xbrl?.net_borrowing ?? 0
   const fcf         = ocf - capex
 
@@ -245,9 +266,15 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
     ticker: T,
     name:        String(price.longName ?? price.shortName ?? T),
     exchange:    String(price.exchangeName ?? "US"),
-    fiscal_year: xbrl?.fiscalYearEnd
-      ? `FY${new Date(xbrl.fiscalYearEnd).getFullYear()}`
-      : `FY${new Date().getFullYear() - 1}`,
+    fiscal_year: usingLtm && ltm
+      ? (() => {
+          const d = new Date(ltm.endDate)
+          const qName = ["", "Q1", "Q2", "Q3"][ltm.quartersAhead] ?? `Q${ltm.quartersAhead}`
+          return `LTM ${qName} FY${d.getFullYear()}`
+        })()
+      : xbrl?.fiscalYearEnd
+        ? `FY${new Date(xbrl.fiscalYearEnd).getFullYear()}`
+        : `FY${new Date().getFullYear() - 1}`,
     currency:    String(price.currency ?? "USD"),
     units:       "millions",
     sources:     sec
@@ -267,16 +294,72 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
     acquisitions: {},
     comps: liveComps,
     capm: {
-      rf:           0.043,
+      rf:           fredResult.rf,   // live 10-yr Treasury from FRED (or 4.3% fallback)
       beta,
-      erp:          0.055,
+      erp:          0.055,           // Damodaran implied ERP — updated manually each quarter
       cost_of_debt: 0.045,
     },
-    default_assumptions: {
-      beta,
-      capex_pct: revenue > 0 ? capex / revenue : 0.03,
-      tax_rate: taxRate,
-    },
+    default_assumptions: (() => {
+      // ── Company-specific growth rates from historical data ──────────────────
+      // Use 3-year average historical revenue growth as the Base starting point.
+      // FMP consensus overrides this when available (more accurate).
+      // This replaces the generic 2.5/3.5/4.0% presets which systematically
+      // undervalue fast-growing companies and bias signals toward SELL.
+      const histGrowthRates: number[] = []
+      for (let i = 1; i < histRevenue.length; i++) {
+        if (histRevenue[i - 1] > 0 && histRevenue[i] > 0) {
+          histGrowthRates.push(histRevenue[i] / histRevenue[i - 1] - 1)
+        }
+      }
+      const recentGrowth = histGrowthRates.slice(-3)
+      const avgHistGrowth = recentGrowth.length > 0
+        ? recentGrowth.reduce((a, b) => a + b, 0) / recentGrowth.length
+        : 0.04
+      // Clamp to 0–60% (avoid NVDA-style 100%+ distorting the base case)
+      const yr1_hist = Math.min(0.60, Math.max(0.01, avgHistGrowth))
+      // Gentle taper: base case assumes growth moderates over the projection period
+      const yr2_hist = yr1_hist * 0.85
+      const yr3_hist = yr2_hist * 0.80
+
+      // ── Exit multiple from peer median EV/EBITDA ────────────────────────────
+      // Derive from actual peer comps so each company gets a sector-appropriate multiple.
+      // Require ≥3 peers for median; fall back to sector default if peer set is thin.
+      const peerEvEbitdas = Object.values(liveComps)
+        .map((c) => c.ev_ebitda)
+        .filter((v) => v > 3 && v < 80)  // cap at 80x — outliers (NVDA AI hype) skew average
+      const sortedPeers = [...peerEvEbitdas].sort((a, b) => a - b)
+      // Use lower-middle for even arrays (conservative: avoid outlier inflation)
+      const midIdx = Math.floor((sortedPeers.length - 1) / 2)
+      const peerMedianEvEbitda = sortedPeers.length >= 3
+        ? sortedPeers[midIdx]
+        : sortedPeers.length > 0
+          ? sortedPeers.reduce((a, b) => a + b, 0) / sortedPeers.length  // mean if <3 peers
+          : 18.0  // S&P 500 long-run median
+
+      // ── Forward-looking growth bias correction ──────────────────────────────
+      // Historical 3yr avg can be stale for cyclical dips (e.g. AAPL FY2023 was -2.9%).
+      // Apply a mild upward correction toward the most recent year's actual growth,
+      // blending 60% most-recent-year + 40% 3yr-average — more predictive than pure average.
+      const mostRecentGrowth = histGrowthRates.length > 0
+        ? histGrowthRates[histGrowthRates.length - 1]
+        : avgHistGrowth
+      const blendedGrowth = 0.6 * mostRecentGrowth + 0.4 * avgHistGrowth
+      const yr1_base = Math.min(0.60, Math.max(0.01, blendedGrowth))
+      const yr2_base = yr1_base * 0.85
+      const yr3_base = yr2_base * 0.80
+
+      return {
+        beta,
+        capex_pct: revenue > 0 ? capex / revenue : 0.03,
+        tax_rate: taxRate,
+        // Growth: FMP consensus > blended historical > generic preset (in priority order)
+        yr1_g: consensus?.yr1_g ?? yr1_base,
+        yr2_g: consensus?.yr2_g ?? yr2_base,
+        yr3_g: consensus?.yr3_g ?? yr3_base,
+        // Exit multiple: peer median EV/EBITDA (≥3 peers) or mean, never <6x
+        exit_mult: Math.max(6, peerMedianEvEbitda),
+      }
+    })(),
     overview_metrics: {
       revenue_growth: histRevenue.length >= 2 && histRevenue[histRevenue.length - 2] > 0
         ? `${(((histRevenue[histRevenue.length - 1] / histRevenue[histRevenue.length - 2]) - 1) * 100).toFixed(1)}%`
@@ -285,6 +368,24 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
         ? `${(((histEps[histEps.length - 1] / histEps[histEps.length - 2]) - 1) * 100).toFixed(1)}%`
         : undefined,
     },
+    dataFlags: {
+      da_is_fallback,
+      capex_is_fallback,
+      ocf_missing: (xbrl?.ocf ?? 0) <= 0 && !usingLtm,
+      rf_source:   fredResult.rfSource,
+      rf_date:     fredResult.rfDate,
+      data_age_days: sec?.date
+        ? Math.floor((Date.now() - new Date(sec.date).getTime()) / 86_400_000)
+        : -1,
+      hist_years:  histRevenue.length,
+      filing_date: sec?.date ?? "",
+      ltm_available:       usingLtm,
+      ltm_end_date:        ltm?.endDate ?? "",
+      ltm_quarters_ahead:  ltm?.quartersAhead ?? 0,
+      consensus_available: consensus !== null,
+      consensus_analysts:  consensus?.analysts ?? 0,
+    } satisfies DataFlags,
+    ...(consensus && { consensus }),
   }
 
   return { config, sec, news, cachedAt: new Date().toISOString() }

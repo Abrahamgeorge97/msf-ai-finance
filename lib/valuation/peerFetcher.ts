@@ -53,7 +53,11 @@ type FdMod = { operatingCashflow?: number }
 type PrMod = { regularMarketPrice?: number }
 
 // ── Fetch one peer's multiples ─────────────────────────────────────────────────
-async function fetchOneComp(peerTicker: string): Promise<Comp | null> {
+interface CompWithMktCap extends Comp {
+  marketCapM: number  // market cap in millions — used for size filtering, not returned
+}
+
+async function fetchOneComp(peerTicker: string): Promise<CompWithMktCap | null> {
   try {
     const data = await yahooFinance.quoteSummary(peerTicker, {
       modules: ["defaultKeyStatistics", "summaryDetail", "financialData", "price"],
@@ -68,16 +72,18 @@ async function fetchOneComp(peerTicker: string): Promise<Comp | null> {
     const shares = n(ks.sharesOutstanding)
     const ocf    = n(fd.operatingCashflow)
     const cfps   = shares > 0 ? ocf / shares : 0
+    const marketCapM = price > 0 && shares > 0 ? (price * shares) / 1_000_000 : 0
 
     const pe = n(sd.trailingPE) || n(sd.forwardPE) || n(ks.forwardPE, 20)
 
-    const comp: Comp = {
-      ev_ebitda: n(ks.enterpriseToEbitda, 15),
-      ev_rev:    n(ks.enterpriseToRevenue, 3),
+    const comp: CompWithMktCap = {
+      ev_ebitda:  n(ks.enterpriseToEbitda, 15),
+      ev_rev:     n(ks.enterpriseToRevenue, 3),
       pe,
-      peg:       n(ks.pegRatio, 1.5),
-      pb:        n(ks.priceToBook, 4),
-      pcf:       cfps > 0 && price > 0 ? price / cfps : 15,
+      peg:        n(ks.pegRatio, 1.5),
+      pb:         n(ks.priceToBook, 4),
+      pcf:        cfps > 0 && price > 0 ? price / cfps : 15,
+      marketCapM,
     }
 
     // Reject if core multiples are implausible
@@ -92,20 +98,29 @@ async function fetchOneComp(peerTicker: string): Promise<Comp | null> {
 // ── Main export ────────────────────────────────────────────────────────────────
 
 /**
- * Fetches live comparable multiples for 4 sector peers of the given ticker.
- * Falls back to hardcoded Peer A–D if fewer than 2 live fetches succeed.
+ * Fetches live comparable multiples for up to 5 sector peers of the given ticker.
+ * Auto-peers are filtered to market cap 0.15×–10× of the subject company.
+ * Pass `customTickers` to override sector-based selection entirely.
  *
- * @param ticker  - The ticker being analyzed (excluded from peer list)
- * @param sector  - Yahoo Finance assetProfile.sector (e.g. "Technology")
+ * @param ticker        - The ticker being analyzed (excluded from auto list)
+ * @param sector        - Yahoo Finance assetProfile.sector (e.g. "Technology")
+ * @param customTickers - Optional array of tickers to use instead of sector list
+ * @param subjectMktCapM - Subject company market cap in millions (for size filter)
  */
 export async function fetchPeerComps(
   ticker: string,
   sector: string,
+  customTickers?: string[],
+  subjectMktCapM = 0,
 ): Promise<Record<string, Comp>> {
   const T = ticker.toUpperCase()
 
-  const candidates = SECTOR_PEERS[sector] ?? FALLBACK_PEERS
-  const peers = candidates.filter((p) => p !== T).slice(0, 4)
+  // Custom tickers bypass sector logic entirely
+  const candidates = customTickers && customTickers.length > 0
+    ? customTickers.map((t) => t.toUpperCase()).filter((t) => t !== T)
+    : (SECTOR_PEERS[sector] ?? FALLBACK_PEERS).filter((p) => p !== T)
+
+  const peers = candidates.slice(0, 6)  // fetch up to 6, keep best 5
 
   if (peers.length === 0) return HARDCODED_FALLBACK
 
@@ -113,10 +128,21 @@ export async function fetchPeerComps(
 
   const comps: Record<string, Comp> = {}
   results.forEach((result, i) => {
-    if (result.status === "fulfilled" && result.value !== null) {
-      comps[peers[i]] = result.value
+    if (result.status !== "fulfilled" || result.value === null) return
+
+    const { marketCapM, ...comp } = result.value
+
+    // Market cap size filter: accept if subject unknown OR peer is within 0.15×–10× range
+    if (!customTickers && subjectMktCapM > 0 && marketCapM > 0) {
+      if (marketCapM < subjectMktCapM * 0.15 || marketCapM > subjectMktCapM * 10) return
     }
+
+    comps[peers[i]] = comp
   })
 
-  return Object.keys(comps).length >= 2 ? comps : HARDCODED_FALLBACK
+  // Keep at most 5 peers
+  const entries = Object.entries(comps).slice(0, 5)
+  const trimmed = Object.fromEntries(entries)
+
+  return Object.keys(trimmed).length >= 2 ? trimmed : HARDCODED_FALLBACK
 }

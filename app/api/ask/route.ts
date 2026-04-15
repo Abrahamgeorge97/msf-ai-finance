@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server"
-import OpenAI from "openai"
+import Anthropic from "@anthropic-ai/sdk"
 
-// ── Comprehensive knowledge base (ported from qa_assistant.py) ────────────────
+// ── System prompt (static — cached by Claude's prompt caching) ────────────────
 
 const SYSTEM_PROMPT = `You are an expert financial analyst assistant embedded in the MSF AI Finance Equity Valuation Terminal.
 You help users understand valuation models, financial assumptions, and how to interpret outputs.
 Be concise, precise, and always reference actual numbers from the company context when answering.
+When relevant, you can cross-check or supplement data using web search.
 
 ## Platform Overview
 The terminal fetches live financial data from SEC EDGAR (XBRL 10-K filings) and Yahoo Finance,
@@ -112,16 +113,6 @@ then runs 14 institutional-grade valuation methods to produce a consensus Buy / 
 
 ---
 
-## Scenarios
-
-| Scenario | WACC | Yr1 Growth | Yr3 Growth | Target EBITDA Margin | Exit Multiple |
-|---|---|---|---|---|---|
-| Base | 8.5% | 2.5% | 4.0% | 27.0% | 14.0× |
-| Bull | 7.5% | 4.5% | 6.0% | 30.0% | 17.0× |
-| Bear | 10.0% | 0.5% | 2.0% | 23.0% | 11.0× |
-
----
-
 ## Buy / Hold / Sell Signal System
 - **BUY**: Model price target > 15% above current market price.
 - **HOLD**: Model price target within ±15% of current market price.
@@ -130,10 +121,15 @@ then runs 14 institutional-grade valuation methods to produce a consensus Buy / 
 
 ---
 
-## Data Sources
+## Data Sources & Accuracy
 - **Fundamentals**: SEC EDGAR XBRL API (10-K filings) — D&A, CapEx, equity, OCF, all balance sheet items.
 - **Market data**: Yahoo Finance — live price, beta, market cap.
 - **CAPM inputs**: Risk-free rate, ERP, and cost of debt are user-adjustable in the Assumptions drawer.
+- **D&A fallback**: If XBRL has no D&A concept, falls back to 3% of revenue (may understate for capital-intensive industries).
+- **CapEx fallback**: If XBRL has no CapEx concept, falls back to 2.5% of revenue.
+- **Data age**: Based on most recent 10-K filing — may be 6–18 months old depending on fiscal year.
+
+When users ask about data accuracy, use web search to cross-check key metrics against current sources.
 
 Answer concisely and precisely. Use numbers from the company context when relevant.
 If asked about a specific model, explain how it works and what the current inputs imply.`
@@ -174,6 +170,7 @@ function buildContext(config: Record<string, unknown>, assumptions: Record<strin
 | Net Debt | $${(B.net_debt ?? 0).toLocaleString()}M |
 | ROE | ${((B.roe ?? 0) * 100).toFixed(1)}% |
 | Tax Rate | ${((B.tax_rate ?? 0) * 100).toFixed(1)}% |
+| D&A Total | $${(B.da_total ?? 0).toLocaleString()}M |
 
 ${compsText ? `### Peer Comparables\n${compsText}` : ""}
 
@@ -198,40 +195,82 @@ ${compsText ? `### Peer Comparables\n${compsText}` : ""}
 ---`
 }
 
-// ── API route (streaming) ──────────────────────────────────────────────────────
+// ── API route (streaming with Claude + web search for cross-checking) ──────────
 
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder()
 
   const { messages, config, assumptions } = await req.json()
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    const body = encoder.encode("OpenAI API key not configured. Add OPENAI_API_KEY to your .env.local file.")
+    const body = encoder.encode(
+      "Anthropic API key not configured. Add ANTHROPIC_API_KEY to your .env.local file."
+    )
     return new Response(body, { headers: { "Content-Type": "text/plain; charset=utf-8" } })
   }
 
-  try {
-    const client = new OpenAI({ apiKey })
-    const systemContent = SYSTEM_PROMPT + "\n\n" + buildContext(config, assumptions)
+  const client = new Anthropic({ apiKey })
+  const contextBlock = buildContext(config, assumptions)
 
-    const stream = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemContent },
-        ...messages.slice(-12),
+  try {
+    // Stream with prompt caching on the system prompt (reduces cost ~90% on repeated queries)
+    const stream = client.messages.stream({
+      model: "claude-opus-4-6",
+      max_tokens: 1024,
+      system: [
+        {
+          type: "text",
+          // Stable base prompt — cached across all queries to this endpoint
+          text: SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+        {
+          type: "text",
+          // Per-company context — cached per ticker session
+          text: contextBlock,
+          cache_control: { type: "ephemeral" },
+        },
       ],
-      max_tokens: 700,
-      temperature: 0.25,
-      stream: true,
+      tools: [
+        // Web search: Claude can cross-check data against live sources
+        { type: "web_search_20260209", name: "web_search" },
+      ],
+      messages: (messages as { role: string; content: string }[])
+        .slice(-12)
+        .map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
     })
 
     const readable = new ReadableStream({
       async start(controller) {
         try {
-          for await (const chunk of stream) {
-            const text = chunk.choices[0]?.delta?.content ?? ""
+          for await (const event of stream) {
+            // Stream text deltas — these come through whether Claude answered
+            // directly or used web search first (server-side tool, no client loop needed)
+            if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "text_delta"
+            ) {
+              controller.enqueue(encoder.encode(event.delta.text))
+            }
+          }
+        } catch (err) {
+          // If web_search tool fails (e.g. not available on this tier),
+          // fall back to the final message text only
+          try {
+            const finalMsg = await stream.finalMessage()
+            const text = finalMsg.content
+              .filter((b): b is Anthropic.TextBlock => b.type === "text")
+              .map((b) => b.text)
+              .join("")
             if (text) controller.enqueue(encoder.encode(text))
+          } catch {
+            controller.enqueue(
+              encoder.encode(`Error: ${err instanceof Error ? err.message : "Unknown error"}`)
+            )
           }
         } finally {
           controller.close()

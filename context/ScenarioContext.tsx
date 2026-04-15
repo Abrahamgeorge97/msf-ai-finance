@@ -37,20 +37,44 @@ interface ProviderProps {
 }
 
 export function ScenarioProvider({ children, initial }: ProviderProps) {
-  const [assumptions, setAssumptions] = useState<Assumptions>({
+  // Merge: DEFAULT_ASSUMPTIONS < SCENARIO_PRESETS.Base < company-specific initial
+  // This ensures company-derived growth/exit_mult override the generic presets
+  const baseAssumptions: Assumptions = {
     ...DEFAULT_ASSUMPTIONS,
-    // Seed live CAPM/tax fields from company config if provided
-    ...(initial?.beta !== undefined && { beta: initial.beta }),
-    ...(initial?.tax_rate !== undefined && { tax_rate: initial.tax_rate }),
     ...initial,
-  })
+    scenario: "Base",
+  }
+
+  const [assumptions, setAssumptions] = useState<Assumptions>(baseAssumptions)
 
   const applyScenario = useCallback((s: ScenarioKey) => {
-    setAssumptions((prev) => ({
-      ...prev,
-      ...SCENARIO_PRESETS[s],
-      scenario: s,
-    }))
+    setAssumptions(() => {
+      if (s === "Base") {
+        // Base: restore the company-seeded defaults exactly
+        return { ...baseAssumptions, scenario: "Base" }
+      }
+
+      // Bull / Bear: apply scenario multipliers on top of the company-seeded Base
+      // so the scenario reflects THIS company's dynamics, not generic values.
+      const base = baseAssumptions
+      const multiplier = s === "Bull" ? 1.5 : 0.35  // Bull = +50% growth; Bear = -65% growth
+      const waccDelta  = s === "Bull" ? -0.010 : +0.015
+      const multDelta  = s === "Bull" ? +4.0   : -6.0
+
+      return {
+        ...base,
+        ...SCENARIO_PRESETS[s],                       // take WACC, tax, CAPM from preset
+        // Override growth with company-relative scaling
+        yr1_g:     Math.min(0.60, Math.max(0.005, base.yr1_g * multiplier)),
+        yr2_g:     Math.min(0.55, Math.max(0.005, base.yr2_g * multiplier)),
+        yr3_g:     Math.min(0.50, Math.max(0.005, base.yr3_g * multiplier)),
+        // Override exit multiple with peer-relative adjustment
+        exit_mult: Math.max(4, (base.exit_mult ?? 18) + multDelta),
+        wacc:      Math.max(0.05, base.wacc + waccDelta),
+        scenario:  s,
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const setAssumption = useCallback(

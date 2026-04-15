@@ -3,18 +3,23 @@ import type { Assumptions } from "@/types/valuation"
 type PresetKey = "Base" | "Bull" | "Bear"
 type PresetValues = Omit<Assumptions, "scenario" | "proj_years_n" | "n_sims" | "ddm_g">
 
+// NOTE: yr1_g, yr2_g, yr3_g, and exit_mult are intentionally NOT set here.
+// Those are seeded company-specifically from historical XBRL data and peer comps
+// by yahooFetcher.ts → default_assumptions.  The scenario toggle applies
+// a +/- delta on top of whatever base the company's data produced.
+// Only set them here as a last-resort fallback (no historical data available).
 export const SCENARIO_PRESETS: Record<PresetKey, PresetValues> = {
   Base: {
-    yr1_g: 0.025,
-    yr2_g: 0.035,
-    yr3_g: 0.040,
+    yr1_g: 0.06,    // fallback only — overridden by historical data
+    yr2_g: 0.05,
+    yr3_g: 0.04,
     lt_g: 0.030,
     terminal_g: 0.025,
     wacc: 0.085,
     cost_of_equity: 0.085,
     target_ebitda_m: 0.270,
     capex_pct: 0.025,
-    exit_mult: 14.0,
+    exit_mult: 18.0,  // fallback: current S&P median ~18-20x EV/EBITDA
     beta: 1.0,
     tax_rate: 0.21,
     // CAPM inputs
@@ -25,16 +30,16 @@ export const SCENARIO_PRESETS: Record<PresetKey, PresetValues> = {
     nwc_pct_rev: 0.03,
   },
   Bull: {
-    yr1_g: 0.045,
-    yr2_g: 0.055,
-    yr3_g: 0.060,
+    yr1_g: 0.10,
+    yr2_g: 0.085,
+    yr3_g: 0.07,
     lt_g: 0.045,
     terminal_g: 0.030,
     wacc: 0.075,
     cost_of_equity: 0.075,
     target_ebitda_m: 0.300,
     capex_pct: 0.020,
-    exit_mult: 17.0,
+    exit_mult: 22.0,
     beta: 0.85,
     tax_rate: 0.21,
     // CAPM inputs
@@ -45,16 +50,16 @@ export const SCENARIO_PRESETS: Record<PresetKey, PresetValues> = {
     nwc_pct_rev: 0.03,
   },
   Bear: {
-    yr1_g: 0.005,
-    yr2_g: 0.010,
-    yr3_g: 0.020,
+    yr1_g: 0.01,
+    yr2_g: 0.02,
+    yr3_g: 0.025,
     lt_g: 0.020,
     terminal_g: 0.020,
     wacc: 0.100,
     cost_of_equity: 0.100,
     target_ebitda_m: 0.230,
     capex_pct: 0.030,
-    exit_mult: 11.0,
+    exit_mult: 12.0,
     beta: 1.2,
     tax_rate: 0.21,
     // CAPM inputs
