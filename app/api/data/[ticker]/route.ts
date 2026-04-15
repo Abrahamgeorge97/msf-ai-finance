@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { fetchLiveConfig } from "@/lib/valuation/yahooFetcher"
 
+// Vercel function timeout — 60s covers cold EDGAR + Yahoo + FRED + peer fetches
+export const maxDuration = 60
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ ticker: string }> }

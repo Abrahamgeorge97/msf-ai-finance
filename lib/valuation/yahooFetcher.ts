@@ -24,6 +24,14 @@ function n(v: unknown, fallback = 0): number {
   return isFinite(x) ? x : fallback
 }
 
+/** Wrap a promise with a hard timeout — returns null if it doesn't resolve in time. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ])
+}
+
 const M = 1_000_000  // Yahoo returns raw USD; divide by this → millions
 
 // ── SEC EDGAR ─────────────────────────────────────────────────────────────────
@@ -121,14 +129,15 @@ export async function fetchLiveConfig(ticker: string): Promise<FetchResult> {
   const approxMktCapM = prFull.marketCap ? prFull.marketCap / 1_000_000 : 0
 
   const [sec, xbrl, news, liveComps, fredResult] = await Promise.all([
-    cik ? fetchLatest10K(cik) : Promise.resolve(null),
-    cik ? fetchXbrlFundamentals(cik) : Promise.resolve(null),
-    fetchNews(T, companyName),
-    fetchPeerComps(T, sector, undefined, approxMktCapM),
-    fetchLiveRiskFreeRate(),
+    cik ? withTimeout(fetchLatest10K(cik), 12_000) : Promise.resolve(null),
+    cik ? withTimeout(fetchXbrlFundamentals(cik), 20_000) : Promise.resolve(null),
+    withTimeout(fetchNews(T, companyName), 8_000).then((r) => r ?? []),
+    withTimeout(fetchPeerComps(T, sector, undefined, approxMktCapM), 12_000).then((r) => r ?? {}),
+    withTimeout(fetchLiveRiskFreeRate(), 5_000).then((r) => r ?? { rf: 0.043, rfSource: "fallback" as const, rfDate: "" }),
   ])
 
-  // ── FMP consensus (needs XBRL revenue as baseline — run after xbrl resolves) ──
+  // FMP consensus runs after XBRL (needs real revenue as baseline for growth rate math).
+  // Fast: ~200ms when key is set, instant null when key is missing — not a bottleneck.
   const baselineRevForConsensus = xbrl?.ltm?.revenue ?? xbrl?.revenue ?? 0
   const consensus = await fetchConsensusEstimates(T, baselineRevForConsensus)
 

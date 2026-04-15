@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { fetchPeerComps } from "@/lib/valuation/peerFetcher"
 
+export const maxDuration = 30
+
 /**
  * GET /api/peers?tickers=MSFT,GOOGL,META
  * Returns live multiples for the supplied comma-separated tickers.

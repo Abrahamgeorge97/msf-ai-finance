@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 
+export const maxDuration = 60
+
 // ── System prompt (static — cached by Claude's prompt caching) ────────────────
 
 const SYSTEM_PROMPT = `You are an expert financial analyst assistant embedded in the MSF AI Finance Equity Valuation Terminal.
